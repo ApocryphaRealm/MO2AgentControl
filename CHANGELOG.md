@@ -2,7 +2,7 @@
 
 Versions are issued by the project's version gate. Written as the change happens (rule 61).
 
-## 1.0.0 - 2026-10-24 - untested - first public release
+## 1.0.0 - 2026-10-24 - working - first public release
 
 ### Added
 * An MO2 plugin that opens a command channel on 127.0.0.1 only, with a new random token each session, written to
