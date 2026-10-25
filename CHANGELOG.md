@@ -17,10 +17,23 @@ Versions are issued by the project's version gate. Written as the change happens
 * Follows MO2 2.5.2's own code where it touches it (MO2-REFERENCE.md): the profile switch goes through MO2's profile box
   handler, `run` closes the process handle MO2 hands over, `set_plugins` refuses the game's primary plugins (MO2 never
   changes or lists them), and the settings' descriptions are translated even though MO2 reads them before `init()`.
-* `tools\mo2-ctl.py`, a standalone client (Python 3.8+, standard library only), and `docs\PROTOCOL.md`, the protocol
-  reference with a minimal client example.
+* `mo2_ctl.py`, a standalone client (Python 3.8+, standard library only; the `mo2-ctl` command once installed), and
+  `docs\PROTOCOL.md`, the protocol reference with a minimal client example. `tools\mo2-ctl.py` runs the same file for
+  anything that still calls the client at that path.
+* `mo2_mcp.py`, a Model Context Protocol server (stdio; the `mo2-mcp` command once installed) built on the same client:
+  twelve tools - `info`, `profiles`, `mods`, `plugins`, `executables`, `overwrite`, `backups`, `set_mods`, `set_plugins`,
+  `select_profile`, `refresh`, `run`. The plugin's in-use refusal reaches the agent word for word as the tool's error,
+  and every write tool has a required `confirm` argument the server never fills in itself. MO2 not running, the plugin
+  missing or a stale channel file each give a plain error saying so. Logs to stderr; `--log-level debug` logs every
+  request. `docs\MCP.md`: ready-to-paste configuration for Claude Desktop, Claude Code and Cursor, the tools, the errors.
+* A pip package, `mo2-agent-control` (`pyproject.toml`; Python 3.10+, depends on `mcp`), holding the client and the
+  server as the `mo2-ctl` and `mo2-mcp` commands; the plugin itself is still copied into MO2.
+* `tests\test_mo2_ctl_and_mcp.py`: the client and the server against the plugin's core behind a real loopback server
+  (45 checks, among them the refusal, the confirm note, the missing-channel errors and a full stdio round trip), and
+  `tools\make_release.py`, which builds the release zip and its notes from the CHANGELOG into `dist\`.
 * The plugin's own texts (its description, menu entry, settings and status window) in English, Japanese, Korean,
-  Chinese, Russian, German, French, Spanish, Italian, Polish and Czech. Command replies stay English: tools read them.
+  Chinese, Russian, German, French, Spanish, Italian, Polish and Czech. Command replies, mo2-ctl's output and the MCP
+  tools' texts stay English: tools read them.
 
 ### Development history before 1.0.0
 * 2026-10-24: built as "Apocrypha Agent Control" inside the project's own scripts (commits 4e62ff0 and e661987 of the

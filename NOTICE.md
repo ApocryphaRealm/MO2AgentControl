@@ -16,13 +16,17 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ## Why GPL-3.0-or-later
 
-Every mod of this project is GPL-3.0-or-later by default. The plugin and the client are our own Python code; the
-plugin runs inside Mod Organizer 2's Python plugin host (`mobase`, PyQt6) and links nothing else, and the client uses
-only Python's standard library.
+Every mod of this project is GPL-3.0-or-later by default. The plugin, the client and the MCP server are our own Python
+code; the plugin runs inside Mod Organizer 2's Python plugin host (`mobase`, PyQt6) and links nothing else, the client
+uses only Python's standard library, and the MCP server imports the `mcp` package (below), which is not bundled.
 
 ## What it builds on
 
 Mod Organizer 2 (https://github.com/ModOrganizer2/modorganizer, GPL-3.0) provides the plugin API (`IOrganizer`,
 `IModList`, `IPluginList`, `startApplication`, the persistent settings store) and Qt's `QTcpServer` through PyQt6.
+
+The MCP server (`mo2_mcp.py`) uses the Model Context Protocol Python SDK, `mcp`
+(https://github.com/modelcontextprotocol/python-sdk, MIT License), installed as a dependency by pip; nothing of it is
+copied into this repository.
 
 Source code: https://github.com/ApocryphaRealm/MO2AgentControl

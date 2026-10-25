@@ -4,31 +4,42 @@ Version 1.0.0
 
 A Mod Organizer 2 plugin that lets scripts, tools and AI agents operate a running MO2 - list and tick
 mods and plugins, switch profiles, refresh, run an executable through MO2's virtual file system -
-without clicking on its window. Comes with mo2-ctl, a command-line client, and a documented JSON
-protocol (docs\PROTOCOL.md) for writing your own.
+without clicking on its window. Comes with mo2-ctl, a command-line client, mo2-mcp, an MCP server
+that gives AI agents (Claude Desktop, Claude Code, Cursor) the same commands as tools, and a
+documented JSON protocol (docs\PROTOCOL.md) for writing your own.
 
 THIS IS NOT A MOD. Do not install it with the mod manager.
 
 REQUIREMENTS
 ------------
-Mod Organizer 2 2.5 or newer. mo2-ctl needs Python 3.8 or newer (standard library only).
+Mod Organizer 2 2.5 or newer. mo2_ctl.py needs Python 3.8 or newer (standard library only); the MCP
+server needs Python 3.10 or newer and the "mcp" package (pip install mcp), or install both with
+pipx install mo2-agent-control.
 
 INSTALLATION
 ------------
 Copy the folder plugins\ApocryphaAgentControl into your MO2 folder's "plugins" folder, next to the
 other plugins, and restart MO2. Tools -> Agent Control shows whether it is listening.
-Copy tools\mo2-ctl.py anywhere convenient.
+Copy mo2_ctl.py (and mo2_mcp.py, if you want the MCP server) anywhere convenient - or
+pipx install mo2-agent-control for the mo2-ctl and mo2-mcp commands.
 To remove it, delete the plugins\ApocryphaAgentControl folder.
 
 USE
 ---
-  python mo2-ctl.py --instance "D:\MO2" info
-  python mo2-ctl.py --instance "D:\MO2" mods active_only=true
-  python mo2-ctl.py --instance "D:\MO2" set_mods names='["My Patch"]' active=true
-  python mo2-ctl.py --instance "D:\MO2" set_plugins names='["MyPatch.esp"]' active=false
-  python mo2-ctl.py --instance "D:\MO2" select_profile name="Testing"
-  python mo2-ctl.py --instance "D:\MO2" run executable="SKSE"
-  python mo2-ctl.py --help        (every command)
+  python mo2_ctl.py --instance "D:\MO2" info
+  python mo2_ctl.py --instance "D:\MO2" mods active_only=true
+  python mo2_ctl.py --instance "D:\MO2" set_mods names='["My Patch"]' active=true
+  python mo2_ctl.py --instance "D:\MO2" set_plugins names='["MyPatch.esp"]' active=false
+  python mo2_ctl.py --instance "D:\MO2" select_profile name="Testing"
+  python mo2_ctl.py --instance "D:\MO2" run executable="SKSE"
+  python mo2_ctl.py --help        (every command)
+
+AI AGENTS (MCP)
+---------------
+  python mo2_mcp.py --instance "D:\MO2"      (or: mo2-mcp --instance "D:\MO2")
+Add it to Claude Desktop, Claude Code or Cursor with the snippets in docs\MCP.md. The agent gets the
+twelve commands as tools; a change it tries while you are using MO2 is refused, and it has to ask you
+before passing a confirm note.
 
 SAFETY
 ------

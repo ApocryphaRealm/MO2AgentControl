@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mo2-agent-control"
+dynamic = ["version"]
+description = "Operate a running Mod Organizer 2 from scripts and AI agents: the mo2-ctl command-line client and an MCP server for the MO2 Agent Control plugin."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "ApocryphaRealm" }]
+keywords = ["mod-organizer", "mod-organizer-2", "mo2", "skyrim", "modding", "mcp", "model-context-protocol", "ai-agent", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Games/Entertainment",
+    "Topic :: Utilities",
+]
+dependencies = ["mcp>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/ApocryphaRealm/MO2AgentControl"
+Source = "https://github.com/ApocryphaRealm/MO2AgentControl"
+Changelog = "https://github.com/ApocryphaRealm/MO2AgentControl/blob/main/CHANGELOG.md"
+Issues = "https://github.com/ApocryphaRealm/MO2AgentControl/issues"
+Protocol = "https://github.com/ApocryphaRealm/MO2AgentControl/blob/main/docs/PROTOCOL.md"
+
+[project.scripts]
+mo2-ctl = "mo2_ctl:cli"
+mo2-mcp = "mo2_mcp:main"
+
+# The package is the two top-level modules; the MO2 plugin itself (plugins\ApocryphaAgentControl) is installed into
+# MO2 by copying, not by pip, so it is not part of the wheel.
+[tool.setuptools]
+py-modules = ["mo2_ctl", "mo2_mcp"]
+
+[tool.setuptools.dynamic]
+version = { attr = "mo2_ctl.__version__" }

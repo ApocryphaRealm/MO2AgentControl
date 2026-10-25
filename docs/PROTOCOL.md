@@ -1,7 +1,7 @@
 # MO2 Agent Control - the protocol (version 1)
 
-Everything a client needs to talk to the plugin. `tools/mo2-ctl.py` is one such client, and a small one; read it
-alongside this page.
+Everything a client needs to talk to the plugin. `mo2_ctl.py` is one such client, and a small one; read it alongside
+this page. `mo2_mcp.py` wraps that client as a Model Context Protocol server for AI agents ([MCP.md](MCP.md)).
 
 ## 1. Finding the channel
 
