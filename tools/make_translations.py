@@ -21,10 +21,8 @@ S = {
         "Kanał poleceń tylko na tym komputerze (127.0.0.1, nowy tajny token w każdej sesji), przez który skrypty, narzędzia i agenci AI obsługują MO2 bez klikania w jego okno.",
         "Kanál příkazů jen na tomto počítači (127.0.0.1, v každé relaci nový tajný token), přes který skripty, nástroje a agenti AI ovládají MO2 bez klikání do jeho okna.",
     ),
-    "AC_DisplayName": (
-        "Agent Control", "エージェント制御", "에이전트 제어", "代理控制", "Управление агентами", "Agentensteuerung",
-        "Contrôle des agents", "Control de agentes", "Controllo agenti", "Sterowanie agentami", "Ovládání agentů",
-    ),
+    # the product name, which is not translated (the project owner, 2026-10-24: "MO2 Agent Control" everywhere public)
+    "AC_DisplayName": tuple(["MO2 Agent Control"] * len(LANGS)),
     "AC_Tooltip": (
         "Shows whether the command channel is listening",
         "コマンドチャンネルが待ち受け中かどうかを表示します",

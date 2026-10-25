@@ -419,7 +419,7 @@ class AgentControl(mobase.IPluginTool):
         return True
 
     def displayName(self):
-        return TR("AC_DisplayName", "Agent Control")
+        return TR("AC_DisplayName", PLUGIN_NAME)      # the product name, in every language
 
     def tooltip(self):
         return TR("AC_Tooltip", "Shows whether the command channel is listening")
@@ -440,7 +440,7 @@ class AgentControl(mobase.IPluginTool):
                 "refuse_writes_while_in_use", True)) else TR("AC_CheckOff", "The in-use check is off: changes are always accepted."))
         else:
             text = TR("AC_NotListening", "Not listening - see the log in plugins\\data\\{name}\\log.txt.", name=DATA_NAME)
-        QMessageBox.information(self._parent, TR("AC_DisplayName", "Agent Control"), text)
+        QMessageBox.information(self._parent, TR("AC_DisplayName", PLUGIN_NAME), text)
 
 
 def createPlugin():

@@ -35,7 +35,9 @@ Versions are issued by the project's version gate. Written as the change happens
   from the CHANGELOG into `out\`.
 * The plugin's own texts (its description, menu entry, settings and status window) in English, Japanese, Korean,
   Chinese, Russian, German, French, Spanish, Italian, Polish and Czech. Command replies, mo2-ctl's output and the MCP
-  tools' texts stay English: tools read them.
+  tools' texts stay English: tools read them. The product name is "MO2 Agent Control" everywhere a user sees it - the
+  plugin list, the Tools menu entry and the status window in every language (a name is not translated), the READMEs,
+  the page, the pip package's description and the release notes.
 
 ### Development history before 1.0.0
 * 2026-10-24: built as "Apocrypha Agent Control" inside the project's own scripts (commits 4e62ff0 and e661987 of the

@@ -47,7 +47,7 @@ Useful for:
    - Or copy `mo2_ctl.py` anywhere convenient: on its own it needs Python 3.8 or newer and nothing else. For the MCP
      server keep `mo2_mcp.py` beside it and `pip install mcp`.
 
-**Tools -> Agent Control** shows whether the channel is listening and where its channel file is.
+**Tools -> MO2 Agent Control** shows whether the channel is listening and where its channel file is.
 Settings: **Settings -> Plugins -> MO2 Agent Control**.
 
 Requires Mod Organizer 2 2.5 or newer (PyQt6); 2.4 (PyQt5) should work but is untested.
