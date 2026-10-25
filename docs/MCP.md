@@ -108,6 +108,18 @@ MCP shows the server and its tools.
 Transport: stdio. Command: `mo2-mcp --instance <folder>` (or `python mo2_mcp.py --instance <folder>`). No environment
 variables are required.
 
+### Trying it without a client
+
+`tools\mcp_call.py` starts the server over stdio the way a client does, calls one tool and prints the reply:
+
+```
+python tools\mcp_call.py --instance "D:\MO2" --list
+python tools\mcp_call.py --instance "D:\MO2" info
+python tools\mcp_call.py --instance "D:\MO2" set_mods names='["My Patch"]' active=false confirm=""
+```
+
+Exit codes follow mo2-ctl's: 0 answered, 1 the tool returned an error, 3 a refusal, 4 MO2 not reachable.
+
 ## 4. The tools
 
 | Tool | Arguments | What it does |

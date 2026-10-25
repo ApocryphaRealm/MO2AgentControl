@@ -29,8 +29,10 @@ Versions are issued by the project's version gate. Written as the change happens
 * A pip package, `mo2-agent-control` (`pyproject.toml`; Python 3.10+, depends on `mcp`), holding the client and the
   server as the `mo2-ctl` and `mo2-mcp` commands; the plugin itself is still copied into MO2.
 * `tests\test_mo2_ctl_and_mcp.py`: the client and the server against the plugin's core behind a real loopback server
-  (45 checks, among them the refusal, the confirm note, the missing-channel errors and a full stdio round trip), and
-  `tools\make_release.py`, which builds the release zip and its notes from the CHANGELOG into `dist\`.
+  (45 checks, among them the refusal, the confirm note, the missing-channel errors and a full stdio round trip);
+  `tools\mcp_call.py`, which calls one tool through a real stdio session from the command line (to try the server before
+  adding it to a client, and for live tests); and `tools\make_release.py`, which builds the release zip and its notes
+  from the CHANGELOG into `out\`.
 * The plugin's own texts (its description, menu entry, settings and status window) in English, Japanese, Korean,
   Chinese, Russian, German, French, Spanish, Italian, Polish and Czech. Command replies, mo2-ctl's output and the MCP
   tools' texts stay English: tools read them.

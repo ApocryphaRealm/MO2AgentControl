@@ -1,7 +1,9 @@
 __pycache__/
 *.pyc
 plugins/data/
-# packaging output (tools/make_release.py, python -m build)
+# packaging output: tools/make_release.py and python -m build --outdir out (never dist/ - in this project a repo's
+# dist/ folder means "what the mod ships")
+out/
 dist/
 build/
 *.egg-info/
