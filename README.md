@@ -39,14 +39,14 @@ Useful for:
 
 ## Install
 
-1. Download `MO2AgentControl-<version>.zip` from the
+1. Download the `MO2AgentControl` zip from the
    [Releases page](https://github.com/ApocryphaRealm/MO2AgentControl/releases) and unzip it anywhere.
 2. Copy its `plugins\ApocryphaAgentControl` folder into your MO2 folder's `plugins` folder (next to the other
    plugins), and restart MO2. Do not install the zip with MO2's mod installer - it is an MO2 plugin, not a game mod.
 3. Optional, for the command-line client and the MCP server - one of:
    - `pipx install mo2-agent-control` (or `pip install mo2-agent-control`; Python 3.10 or newer). This gives you the
      `mo2-ctl` and `mo2-mcp` commands. If pip says there is no such package, the PyPI upload has not happened yet:
-     install the `.whl` file attached to the release instead (`pipx install mo2_agent_control-<version>-py3-none-any.whl`).
+     install the `.whl` file attached to the release instead (`pipx install` followed by the path of that file).
    - Or copy `mo2_ctl.py` anywhere convenient: on its own it needs Python 3.8 or newer and nothing else. For the MCP
      server keep `mo2_mcp.py` beside it and `pip install mcp`.
 
