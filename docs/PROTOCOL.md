@@ -73,7 +73,7 @@ English whatever language MO2 shows, so a script can match on them.
 | `select_profile` | `name` | switches profile through MO2's own profile box |
 | `set_mods` | `names` (list), `active` (bool) | ticks or unticks mods in the left pane |
 | `set_plugins` | `names` (list), `active` (bool) | ticks or unticks plugins; plugins.txt is written at once (MO2 itself writes it late) |
-| `refresh` | `save` (bool, default false) | MO2's Refresh; `save: true` writes MO2's lists first |
+| `refresh` | `save` (bool, default false) | MO2's Refresh; `save: true` writes modlist.txt first (MO2's own refresh saves nothing else) |
 | `run` | `executable` (a title from `executables`) or `binary` (a path); `args` (list), `cwd`, `profile` | starts the program through MO2's virtual file system - like pressing Run - and replies at once with `started` and `pid`. It never waits: MO2's own wait locks its window. Poll the pid. |
 | `call` | `plugin`, `action`, `args` | hands `action` and `args` to another MO2 plugin's handler (section 5); the reply's `result` is what it returned |
 | `mm` | `action`, `args` | short for `call` with `plugin: "MO2ModlistManager"` |

@@ -51,6 +51,7 @@ _LANG_FILES = {"en": "english", "ja": "japanese", "ko": "korean", "zh": "chinese
                "fr": "french", "es": "spanish", "it": "italian", "pl": "polish", "cs": "czech"}
 STRINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translations")
 _STRINGS = {}
+_LOADED = []     # set once the language is known: MO2 asks for settings() (their descriptions) BEFORE it calls init()
 
 
 def mo2_language(base_dir):
@@ -68,6 +69,7 @@ def mo2_language(base_dir):
 def load_strings(code):
     """Load the strings for a language code ("de", "de_DE", "zh_CN"); English or an unknown code loads nothing."""
     _STRINGS.clear()
+    _LOADED[:] = [True]
     name = _LANG_FILES.get((code or "en").replace("-", "_").split("_")[0].lower(), "english")
     if name == "english":
         return name
@@ -84,7 +86,22 @@ def load_strings(code):
     return name
 
 
+def _ensure_strings():
+    """MO2 registers a plugin's settings before init() (plugincontainer.cpp, MO2-REFERENCE.md), so the first TR() may
+    come before init: the language is then read from MO2's data folder, the application's dataPath property."""
+    if _LOADED:
+        return
+    try:
+        app = QApplication.instance()
+        path = app.property("dataPath") if app is not None else None
+    except Exception:  # noqa: BLE001
+        path = None
+    if path:
+        load_strings(mo2_language(str(path)))
+
+
 def TR(key, english, **kw):
+    _ensure_strings()
     text = _STRINGS.get(key, english)
     if not kw:
         return text
@@ -172,6 +189,15 @@ class Mo2:
         refresh read it back as active). So the state is set in memory AND written into the profile's plugins.txt the
         way MO2 writes it ('*' = active), then MO2 re-reads the file (refresh without saving) and the result is
         checked. core.py backed the file up first."""
+        # the game's primary plugins (Skyrim.esm and the like) are force-loaded: setState never changes them and MO2 leaves
+        # them out of plugins.txt (PluginList::setState, saveTo - MO2-REFERENCE.md), so they are refused, not written in
+        try:
+            primary = {n.lower() for n in self.o.managedGame().primaryPlugins()}
+        except Exception:  # noqa: BLE001
+            primary = set()
+        forced = [n for n in names if n.lower() in primary]
+        if forced:
+            raise ValueError("the game always loads %s (a primary plugin) - it cannot be ticked or unticked" % ", ".join(forced))
         state = mobase.PluginState.ACTIVE if active else mobase.PluginState.INACTIVE
         pl = self.o.pluginList()
         for n in names:
@@ -212,6 +238,10 @@ class Mo2:
     def run(self, target, args, cwd, profile):
         handle = self.o.startApplication(target, list(args), cwd, profile)
         pid = ctypes.windll.kernel32.GetProcessId(ctypes.c_void_p(int(handle))) if handle else 0
+        # "the plugin is in charge of closing the handle, unless waitForApplication() is called on it"
+        # (OrganizerProxy::startApplication, MO2-REFERENCE.md) - run never waits, so it closes it
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(int(handle)))
         if not pid:
             raise RuntimeError("MO2 did not start %r" % target)
         return {"started": target, "pid": pid}

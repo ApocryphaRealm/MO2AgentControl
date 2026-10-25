@@ -14,6 +14,9 @@ Versions are issued by the project's version gate. Written as the change happens
   last few minutes, unless the request carries a `confirm` note. Three settings: on/off (default on), minutes
   (default 5), and an optional activity file from a tool that can tell a person's input from a script's.
 * `modlist.txt`, `plugins.txt` and `loadorder.txt` are backed up before every command that changes the profile.
+* Follows MO2 2.5.2's own code where it touches it (MO2-REFERENCE.md): the profile switch goes through MO2's profile box
+  handler, `run` closes the process handle MO2 hands over, `set_plugins` refuses the game's primary plugins (MO2 never
+  changes or lists them), and the settings' descriptions are translated even though MO2 reads them before `init()`.
 * `tools\mo2-ctl.py`, a standalone client (Python 3.8+, standard library only), and `docs\PROTOCOL.md`, the protocol
   reference with a minimal client example.
 * The plugin's own texts (its description, menu entry, settings and status window) in English, Japanese, Korean,
