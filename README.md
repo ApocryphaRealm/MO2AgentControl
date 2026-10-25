@@ -39,11 +39,14 @@ Useful for:
 
 ## Install
 
-1. Copy the `plugins\ApocryphaAgentControl` folder into your MO2 folder's `plugins` folder (next to the other
-   plugins), and restart MO2.
-2. Optional, for the command-line client and the MCP server - one of:
+1. Download `MO2AgentControl-<version>.zip` from the
+   [Releases page](https://github.com/ApocryphaRealm/MO2AgentControl/releases) and unzip it anywhere.
+2. Copy its `plugins\ApocryphaAgentControl` folder into your MO2 folder's `plugins` folder (next to the other
+   plugins), and restart MO2. Do not install the zip with MO2's mod installer - it is an MO2 plugin, not a game mod.
+3. Optional, for the command-line client and the MCP server - one of:
    - `pipx install mo2-agent-control` (or `pip install mo2-agent-control`; Python 3.10 or newer). This gives you the
-     `mo2-ctl` and `mo2-mcp` commands.
+     `mo2-ctl` and `mo2-mcp` commands. If pip says there is no such package, the PyPI upload has not happened yet:
+     install the `.whl` file attached to the release instead (`pipx install mo2_agent_control-<version>-py3-none-any.whl`).
    - Or copy `mo2_ctl.py` anywhere convenient: on its own it needs Python 3.8 or newer and nothing else. For the MCP
      server keep `mo2_mcp.py` beside it and `pip install mcp`.
 
@@ -94,8 +97,18 @@ For Claude Desktop, add to `%APPDATA%\Claude\claude_desktop_config.json`:
 }
 ```
 
-Claude Code: `claude mcp add mo2 -- mo2-mcp --instance "D:\MO2"`. Cursor: the same JSON in `.cursor\mcp.json`.
-[docs/MCP.md](docs/MCP.md) has every snippet, the no-install variant, the tool list and the error texts.
+Claude Code, one command in Command Prompt or PowerShell:
+
+```
+claude mcp add mo2 -- mo2-mcp --instance "D:\MO2"
+```
+
+Cursor: the same JSON as Claude Desktop's, in `.cursor\mcp.json` in your project (or `%USERPROFILE%\.cursor\mcp.json`
+for every project).
+
+Replace `D:\MO2` with the folder that holds your `ModOrganizer.exe` (backslashes doubled inside JSON).
+[docs/MCP.md](docs/MCP.md) has every snippet, the no-install variant (`python mo2_mcp.py`), the tool list and the
+error texts.
 
 The plugin's rules carry through unchanged: reads always work; a write is refused while you are using MO2, and the
 agent gets the refusal in the plugin's words. Every write tool has a required `confirm` argument - the note the plugin

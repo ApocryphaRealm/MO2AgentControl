@@ -15,7 +15,8 @@ restart MO2). Then, for the server, either:
 ```
 pipx install mo2-agent-control
 ```
-(or `pip install mo2-agent-control`). This installs two commands, `mo2-mcp` and `mo2-ctl`.
+(or `pip install mo2-agent-control`). This installs two commands, `mo2-mcp` and `mo2-ctl`. If pip says there is no
+such package, the PyPI upload has not happened yet: `pipx install` the `.whl` file attached to the GitHub release.
 
 **b) no install**: keep `mo2_mcp.py` and `mo2_ctl.py` together in any folder and run `python mo2_mcp.py`. The `mcp`
 package is the one dependency: `pip install mcp`.
