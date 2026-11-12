@@ -19,6 +19,7 @@ Commands (args in a JSON object; docs\PROTOCOL.md is the full reference):
 Replies are English whatever MO2's language is: tools read them, and a script's checks must not change with the
 user's language.
 """
+import difflib
 import hmac
 import json
 import os
@@ -56,9 +57,15 @@ def backup_profile(profile_dir, backups_root, label, now=None):
     return dest
 
 
+def _quoted(names, limit=3):
+    """'a', 'b', 'c' - the first few names, for a message."""
+    return ", ".join("'%s'" % n for n in names[:limit])
+
+
 class Dispatcher:
-    """org: the adapter (see FakeOrganizer in the tests for the methods it needs). presence(): (in_use, why).
-    log(text): one line to the plugin's log. version: the plugin's version text, reported by info."""
+    """org: the adapter (see FakeOrganizer in the tests for the methods it needs; mods_path() is the instance's mods
+    folder). presence(): (in_use, why). log(text): one line to the plugin's log. version: the plugin's version text,
+    reported by info."""
 
     def __init__(self, org, token, backups_root, presence, log=lambda s: None, version=""):
         self.org, self.token, self.backups_root, self.presence, self.log = org, token, backups_root, presence, log
@@ -89,6 +96,13 @@ class Dispatcher:
                     raise Refused("MO2 is in use (%s) - send confirm with a note saying who approved this, or turn off "
                                   "the plugin's in-use check" % why)
                 self.log("%s %s%s" % (cmd, json.dumps(args, ensure_ascii=False), (" (confirm: %s)" % confirm) if confirm else ""))
+                if cmd in ("set_mods", "set_plugins"):
+                    # names are checked before a backup is made: a request that cannot be carried out changes nothing,
+                    # so it should not leave an empty backup folder behind either
+                    if not isinstance(args, dict):
+                        raise ValueError("args must be a JSON object")
+                    args = dict(args)
+                    args["names"] = self._check_names(cmd, args)
                 if cmd in BACKED_UP:
                     backup = backup_profile(self.org.profile_dir(), self.backups_root, cmd)
             out = getattr(self, "c_" + cmd)(args)
@@ -119,7 +133,21 @@ class Dispatcher:
         return {"mods": mods}
 
     def c_plugins(self, a):
-        return {"plugins": self.org.plugins()}
+        plugins = self.org.plugins()
+        if not a.get("include_unlisted"):
+            return {"plugins": plugins}
+        listed = {p["name"].lower() for p in plugins}
+        active = {m["name"]: m["active"] for m in self.org.mods()}
+        out = [dict(p, in_profile=True, mod_active=active.get(p.get("origin"), True)) for p in plugins]
+        extra = []
+        for lower, providers in self._installed_plugins().items():
+            if lower in listed:
+                continue
+            for name, mod, mod_active in providers:
+                extra.append({"name": name, "active": False, "origin": mod, "in_profile": False,
+                              "mod_active": mod_active})
+        extra.sort(key=lambda p: (p["name"].lower(), str(p.get("origin")).lower()))
+        return {"plugins": out + extra}
 
     def c_overwrite(self, a):
         limit = int(a.get("limit", 500))
@@ -152,24 +180,103 @@ class Dispatcher:
         self.org.select_profile(name)
         return {"profile": self.org.profile_name()}
 
-    def _names(self, a, known):
+    def _known(self, cmd):
+        """The names the profile has for cmd: the mods of the left pane, or the plugins in load order."""
+        return [m["name"] for m in self.org.mods()] if cmd == "set_mods" else [p["name"] for p in self.org.plugins()]
+
+    def _check_names(self, cmd, a):
+        """The names of a set_mods / set_plugins request, spelled the way the profile spells them: an exact match first,
+        then a case-insensitive one (MO2 runs on Windows, where a name's case is not part of its identity). The names
+        the profile does not have become one error that says where each one is, if anywhere (_missing); nothing is
+        changed in that case."""
+        if not isinstance(a.get("active"), bool):
+            raise ValueError("active must be true or false")
         names = a.get("names")
         if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
             raise ValueError("names must be a non-empty list of names")
-        missing = [n for n in names if n not in known]
+        known = self._known(cmd)
+        by_lower = {}
+        for k in known:
+            by_lower.setdefault(k.lower(), k)
+        found, missing = [], []
+        for n in names:
+            if n in known:
+                found.append(n)
+            elif n.lower() in by_lower:
+                found.append(by_lower[n.lower()])
+            else:
+                missing.append(n)
         if missing:
-            raise ValueError("not in this profile: %s" % ", ".join(missing[:10]))
-        if not isinstance(a.get("active"), bool):
-            raise ValueError("active must be true or false")
-        return names
+            raise ValueError(self._missing(cmd, missing, known))
+        return found
+
+    def _missing(self, cmd, missing, known):
+        """One error for the names a request has and the profile does not: for a plugin, the mod folder that holds the
+        file and whether that mod is ticked (a plugin of an unticked mod is not in the profile at all - the mod's files
+        are not mounted), or the closest name the profile does have; for a mod, the closest mod name."""
+        head = "not in this profile: "
+        installed = self._installed_plugins() if cmd == "set_plugins" else {}
+        parts, unticked = [], []
+        for n in missing[:10]:
+            providers = installed.get(n.lower()) or []
+            if cmd == "set_plugins" and providers:
+                ticked = [m for name, m, on in providers if on]
+                if ticked:
+                    parts.append("%s (the mod %s is ticked but MO2 has not listed this plugin yet - run refresh, then "
+                                 "try again)" % (n, _quoted(ticked)))
+                else:
+                    mods = [m for name, m, on in providers]
+                    unticked.extend(mods)
+                    parts.append("%s (provided by the inactive mod %s)" % (n, _quoted(mods)))
+                continue
+            bits = []
+            if cmd == "set_plugins":
+                bits.append("no mod folder in this instance has a file of that name")
+            close = difflib.get_close_matches(n, known, n=1, cutoff=0.7)
+            if close:
+                bits.append("closest in this profile: '%s'" % close[0])
+            parts.append("%s (%s)" % (n, "; ".join(bits)) if bits else n)
+        text = head + ", ".join(parts)
+        if len(missing) > 10:
+            text += ", and %d more" % (len(missing) - 10)
+        if unticked:
+            # said once, after the names: the same reason on six names is six times the noise
+            text += ("; tick %s first - an unticked mod's files are not mounted, so its plugins are not in the profile"
+                     % ("that mod" if len(set(unticked)) == 1 else "those mods"))
+        return text + "; nothing was changed"
+
+    def _installed_plugins(self):
+        """{lower-case file name: [(real name, mod, the mod is ticked)]} for the plugin files at the root of every mod
+        folder. A mod folder is a data root: a plugin nested deeper is not loaded by the game, and MO2 does not list it
+        either. Read-only, about 40 ms for 1400 mods; read only when a name is missing from the profile, or for
+        plugins with include_unlisted."""
+        by_mod = {m["name"]: m["active"] for m in self.org.mods()}
+        out = {}
+        root = self.org.mods_path()
+        try:
+            mods = os.listdir(root)
+        except OSError:
+            return out
+        for mod in mods:
+            path = os.path.join(root, mod)
+            if mod not in by_mod or not os.path.isdir(path):
+                continue
+            try:
+                files = os.listdir(path)
+            except OSError:
+                continue
+            for name in files:
+                if name.lower().endswith((".esp", ".esm", ".esl")):
+                    out.setdefault(name.lower(), []).append((name, mod, by_mod[mod]))
+        return out
 
     def c_set_mods(self, a):
-        names = self._names(a, {m["name"] for m in self.org.mods()})
+        names = self._check_names("set_mods", a)
         self.org.set_mods(names, a["active"])
         return {"set": names, "active": a["active"]}
 
     def c_set_plugins(self, a):
-        names = self._names(a, {p["name"] for p in self.org.plugins()})
+        names = self._check_names("set_plugins", a)
         self.org.set_plugins(names, a["active"])
         return {"set": names, "active": a["active"]}
 

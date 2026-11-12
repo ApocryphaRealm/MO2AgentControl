@@ -61,7 +61,7 @@ English whatever language MO2 shows, so a script can match on them.
 | `info` | - | `instance`, `profile`, `game`, `pid`, `version`, `protocol`, `reads`, `writes`, `in_use`, `in_use_why`, `extensions` |
 | `profiles` | - | `profiles` (names), `current` |
 | `mods` | `active_only` (bool) | `mods`: `[{"name", "active", "separator"}]`, in the left pane's order |
-| `plugins` | - | `plugins`: `[{"name", "active", "origin"}]`, in load order; `origin` is the mod that provides the file |
+| `plugins` | `include_unlisted` (bool, default false) | `plugins`: `[{"name", "active", "origin"}]`, in load order; `origin` is the mod that provides the file. With `include_unlisted`, every entry also has `in_profile` and `mod_active`, and plugin files the profile does not have are appended: `{"name", "active": false, "origin": <mod>, "in_profile": false, "mod_active"}` - a file of a mod that is not ticked (`mod_active: false`) or one MO2 has not refreshed yet (`true`) |
 | `overwrite` | `limit` (default 500) | `overwrite` (folder), `files` (paths relative to it), `truncated` |
 | `executables` | - | `executables`: `[{"title", "binary"}]` from MO2's executables list |
 | `backups` | - | `root`, `backups`: `[{"name", "path", "files"}]`, newest first |
@@ -78,12 +78,17 @@ English whatever language MO2 shows, so a script can match on them.
 | `call` | `plugin`, `action`, `args` | hands `action` and `args` to another MO2 plugin's handler (section 5); the reply's `result` is what it returned |
 | `mm` | `action`, `args` | short for `call` with `plugin: "MO2ModlistManager"` |
 
-Names in `names` must match exactly (case included) what `mods` / `plugins` return; an unknown name fails the whole
-request before anything is changed.
+Names in `names` are matched case-insensitively (MO2 runs on Windows, where a name's case is not part of its identity),
+and the profile's own spelling is what the change and the reply's `set` use; one name the profile does not have fails
+the whole request before anything is changed. That error says where the file is: for a plugin, the mod folder that
+provides it and whether that mod is ticked (a plugin of an unticked mod is not in the profile - an unticked mod's files
+are not mounted), the "run refresh" case when the mod is ticked but MO2 has not listed the plugin yet, or the closest
+name the profile does have; for a mod, the closest mod name.
 
 **Backups.** Before `select_profile`, `set_mods`, `set_plugins`, `call` and `mm`, the plugin copies the current profile's
 `modlist.txt`, `plugins.txt` and `loadorder.txt` into `backups\<time>-<command>\`, and the reply names that folder in
-`backup`. To go back: close MO2 and copy the three files into `profiles\<profile>\`.
+`backup`. `set_mods` and `set_plugins` check their names first, so a request that cannot be carried out leaves no backup
+folder: it changes nothing. To go back: close MO2 and copy the three files into `profiles\<profile>\`.
 
 ## 4. The in-use check
 

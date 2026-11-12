@@ -1,7 +1,8 @@
 # MO2 reference - what Mod Organizer 2 does where MO2 Agent Control touches it
 
 Standing rule: before adding to or altering an MO2 feature, read MO2's own implementation at the release tag and follow
-its shape. Read 2026-10-24 for MO2 **2.5.2**, for 1.0.0.
+its shape. Read 2026-10-24 for MO2 **2.5.2**, for 1.0.0; re-read 2026-11-02 for 1.0.1 (organizerproxy.h `modsPath`, the
+plugin list's scope).
 
 ## Sources read
 
@@ -24,6 +25,7 @@ its shape. Read 2026-10-24 for MO2 **2.5.2**, for 1.0.0.
 | ticking mods | `setActive(names, active)` turns the names into mod indices, skipping (with a debug log line) any name that does not exist, and enables or disables them all in one `setModsEnabled` call on the profile; it returns how many it found |
 | ticking plugins | `setState` changes the state in memory only (no save is triggered), and a force-loaded or force-enabled plugin (the game's primary plugins) stays enabled whatever is asked, a force-disabled one stays off; plugins.txt is written only when MO2 saves its plugin list - later, not by `setState` - and leaves the primary plugins out |
 | plugin settings | `registerPlugin` reads each `settings()` entry from ModOrganizer.ini `[Plugins] <plugin name>/<key>` (on disk `<plugin%20name>\<key>`), converting it to the default's type, and falls back to the default when it is missing or unreadable. It runs when the plugin is REGISTERED, which is before `init()` is called |
+| the plugin list | `IPluginList` holds the current profile's plugins: only ticked mods are mounted, so a plugin file in an unticked mod is neither loaded nor listed. `IOrganizer::modsPath()` is the instance's mods folder (organizerproxy.h) - the place a plugin file can be found whether or not its mod is ticked |
 
 ## What ours does, and how it follows MO2
 
@@ -35,6 +37,8 @@ its shape. Read 2026-10-24 for MO2 **2.5.2**, for 1.0.0.
 | set_mods | every name is checked against the mod list first, so the whole request fails instead of MO2 silently skipping an unknown name; then one `setActive` call |
 | set_plugins | refuses the game's primary plugins (`managedGame().primaryPlugins()`), which MO2 never changes or lists; `setState` for each, then plugins.txt is written in MO2's own shape (`*` for active) at once and MO2 re-reads it with `refresh(False)` - because MO2's own write comes late, and a refresh before it read the old file back |
 | settings | three `PluginSetting`s read through `pluginSetting`; their descriptions are translated, and since `settings()` is called before `init()`, the language is read from MO2's data folder (the application's `dataPath` property) on first use |
+| set_mods / set_plugins names | matched case-insensitively and changed under the profile's own spelling. A name the profile does not have is reported with the mod folder that holds the file and whether that mod is ticked (listed from every mod folder's root - a mod folder is a data root), so "a plugin of an unticked mod" is not mistaken for a typo; the check runs before the backup, so a request that fails leaves nothing behind |
+| plugins include_unlisted | the same mod-folder listing, appended to the profile's plugins with `in_profile` and `mod_active`. Off by default: it reads ~1400 folders (about 40 ms here) |
 
 ## Departures to revisit
 
