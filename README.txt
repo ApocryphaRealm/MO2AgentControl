@@ -1,6 +1,6 @@
 MO2 Agent Control
 =================
-Version 1.0.0
+Version 1.0.1
 
 A Mod Organizer 2 plugin that lets scripts, tools and AI agents operate a running MO2 - list and tick
 mods and plugins, switch profiles, refresh, run an executable through MO2's virtual file system -
@@ -39,7 +39,7 @@ AI AGENTS (MCP)
 ---------------
   python mo2_mcp.py --instance "D:\MO2"      (or: mo2-mcp --instance "D:\MO2")
 Add it to Claude Desktop, Claude Code or Cursor with the snippets in docs\MCP.md. The agent gets the
-twelve commands as tools; a change it tries while you are using MO2 is refused, and it has to ask you
+thirteen commands as tools; a change it tries while you are using MO2 is refused, and it has to ask you
 before passing a confirm note.
 
 SAFETY

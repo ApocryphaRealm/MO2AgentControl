@@ -36,7 +36,7 @@ except ImportError:  # MO2 before 2.5
 
 from . import core
 
-__version__ = "1.0.0"    # issued by version-gate.ps1; never typed by hand
+__version__ = "1.0.1"    # issued by version-gate.ps1; never typed by hand
 PLUGIN_NAME = "MO2 Agent Control"
 DATA_NAME = "ApocryphaAgentControl"       # the folder name under plugins\ and plugins\data\ (clients find channel.json there)
 REGISTRY = "apocrypha_agent_registry"
@@ -124,6 +124,12 @@ class Mo2:
 
     def profile_dir(self):
         return self.o.profilePath()
+
+    def mods_path(self):
+        """The instance's mods folder (MO2 2.5.2 has IOrganizer::modsPath; an older or unusual build falls back to
+        <instance>\\mods, which is where a portable instance keeps them)."""
+        fn = getattr(self.o, "modsPath", None)
+        return fn() if fn else os.path.join(self.o.basePath(), "mods")
 
     def game_name(self):
         try:

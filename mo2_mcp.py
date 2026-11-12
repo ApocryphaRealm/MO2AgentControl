@@ -41,11 +41,14 @@ SETTINGS = {"instance": "", "timeout": 600.0}     # filled by main(); the tools 
 
 INSTRUCTIONS = """Operate the user's running Mod Organizer 2 through the MO2 Agent Control plugin.
 Reads (info, profiles, mods, plugins, executables, overwrite, backups) always work.
-Writes (set_mods, set_plugins, select_profile, refresh, run) are refused by MO2 while the user is using it - its window
+Writes (set_mods, set_plugins, select_profile, refresh, run, call) are refused by MO2 while the user is using it - its window
 in front and keyboard or mouse input in the last few minutes. If a write is refused, tell the user what you want to
 change and ask whether to go ahead; only after they agree, call it again with `confirm` set to a short note saying who
 approved it (for example "the user, in chat"). Never fill in confirm on your own.
-Names passed to set_mods / set_plugins must match exactly (case included) what mods / plugins return.
+Names passed to set_mods / set_plugins are matched case-insensitively and the change uses the profile's own spelling.
+A plugin file that only an unticked mod provides is NOT in the profile - an unticked mod's files are not mounted; tick
+that mod first (set_mods), or read plugins with include_unlisted=true to see it. A name the profile does not have fails
+the whole call with a note saying where the file is, and nothing is changed.
 Every write that changes the profile backs up modlist.txt, plugins.txt and loadorder.txt first; the reply names the folder.
 run starts a program through MO2's virtual file system and returns at once with its process id; it never waits."""
 
@@ -109,10 +112,12 @@ def mods(active_only: bool = False) -> dict:
 
 
 @server.tool()
-def plugins() -> dict:
+def plugins(include_unlisted: bool = False) -> dict:
     """The plugins (esp, esm, esl) of the current profile in load order: name, active, origin (the mod that provides
-    the file)."""
-    return request("plugins")
+    the file). include_unlisted also lists plugin files the profile's list does not have - from unticked mods
+    (mod_active false) or from a mod MO2 has not refreshed yet (mod_active true), each as name, active false, origin,
+    in_profile false, mod_active."""
+    return request("plugins", {"include_unlisted": bool(include_unlisted)})
 
 
 @server.tool()
@@ -138,17 +143,21 @@ def backups() -> dict:
 # ---- writes: refused while MO2 is in use unless confirm names who approved ------------------------------------------------
 @server.tool()
 def set_mods(names: list[str], active: bool, confirm: str) -> dict:
-    """Tick (active=true) or untick (active=false) mods in the current profile. names must match exactly what the mods
-    tool returns; one unknown name fails the whole call before anything changes. confirm: who approved this while MO2
-    is in use (ask the user first; "" when no one has, and the write then goes through only while MO2 is idle).
-    The profile's list files are backed up first; the reply names the folder."""
+    """Tick (active=true) or untick (active=false) mods in the current profile. names are matched case-insensitively;
+    one name the profile does not have fails the whole call before anything changes, and the error says the closest
+    mod name the profile does have. confirm: who approved this while MO2 is in use (ask the user first; "" when no one
+    has, and the write then goes through only while MO2 is idle). The profile's list files are backed up first; the
+    reply names the folder."""
     return request("set_mods", {"names": list(names), "active": bool(active)}, confirm)
 
 
 @server.tool()
 def set_plugins(names: list[str], active: bool, confirm: str) -> dict:
-    """Tick or untick plugins (esp, esm, esl) in the current profile; plugins.txt is written at once. names must match
-    exactly what the plugins tool returns. The game's own primary plugins cannot be changed. confirm: who approved
+    """Tick or untick plugins (esp, esm, esl) in the current profile; plugins.txt is written at once. names are matched
+    case-insensitively. A plugin file that only an unticked mod provides is not in the profile (an unticked mod's files
+    are not mounted): tick that mod first with set_mods, then tick the plugin - plugins include_unlisted=true lists
+    those files. One name the profile does not have fails the whole call before anything changes, and the error names
+    the mod that provides the file, if any. The game's own primary plugins cannot be changed. confirm: who approved
     this while MO2 is in use (ask the user first; "" when no one has). The profile's list files are backed up first."""
     return request("set_plugins", {"names": list(names), "active": bool(active)}, confirm)
 
@@ -186,6 +195,18 @@ def run(confirm: str, executable: str = "", binary: str = "", args: list[str] = 
     if profile:
         a["profile"] = profile
     return request("run", a, confirm)
+
+
+@server.tool()
+def call(plugin: str, action: str, confirm: str, args: dict = {}) -> dict:
+    """Hand action and args to another MO2 plugin's command handler - an extension whose name info lists in
+    extensions. The plugin decides what the action means and returns a JSON-able result (the reply's result field).
+    Use this for a plugin's own features that this server does not wrap, for example a mod-order plugin that moves
+    a mod up or down; PROTOCOL.md's `mm` is the same thing with plugin="MO2ModlistManager". An unknown plugin name
+    fails with the same text the plugin would give: "has no command handler loaded in this MO2". confirm: who
+    approved this while MO2 is in use (ask the user first; "" when no one has). The profile's list files are backed
+    up first, like the other writes."""
+    return request("call", {"plugin": plugin, "action": action, "args": dict(args or {})}, confirm)
 
 
 # ---- start ----------------------------------------------------------------------------------------------------------------

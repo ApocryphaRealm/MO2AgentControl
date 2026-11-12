@@ -2,6 +2,32 @@
 
 Versions are issued by the project's version gate. Written as the change happens (rule 61).
 
+## 1.0.1 - 2026-11-02 - untested - runtime mod ordering through `call`, and a plugin name that is not in the profile now says where the file is
+
+The version gate is not in this checkout: 1.0.1 is stamped here for the build and the gate can re-issue the number.
+
+### Fixed
+* `set_plugins` refused a name whose plugin file belongs to a mod that is not ticked with a bare "not in this profile":
+  an unticked mod's files are not mounted, so its plugins are not in MO2's plugin list at all. The error now says which
+  mod provides the file and that the mod must be ticked first; a mod that is ticked but not yet in the list gets "run
+  refresh, then try again"; a name no mod has gets the closest name the profile does have. `set_mods` gets the closest
+  mod name the same way.
+* `set_mods` and `set_plugins` match names case-insensitively and change them under the profile's own spelling (MO2 runs
+  on Windows, where a name's case is not part of its identity), so "my patch.esp" now finds "My Patch.esp".
+* A request whose names are not all in the profile no longer leaves a backup folder behind: the names are checked
+  before the profile files are copied, and a request that changes nothing leaves nothing.
+
+### Added
+* The MCP server exposes the plugin's `call` command as a `call` tool: it hands an action and its args to another MO2
+  plugin's command handler (`info`'s `extensions` lists the ones loaded in this MO2), which is how a mod-order plugin
+  such as `MO2PriorityControl` moves a mod up or down while MO2 is running - the server does not wrap those actions
+  itself. It is a write: refused while MO2 is in use without `confirm`, and the profile's list files are backed up first.
+* `plugins` takes `include_unlisted` (default false): the reply then lists the plugin files the profile does not have -
+  from mods that are not ticked, or from a mod MO2 has not refreshed yet - each with `in_profile` and `mod_active`, so a
+  client can see whether a plugin exists while its mod is off. The MCP `plugins` tool takes the same argument.
+* `docs\PROTOCOL.md` and `docs\MCP.md`: the plugin-list scope (an unticked mod has no plugins in the profile), the new
+  fields, the new error texts, and that names are matched case-insensitively.
+
 ## 1.0.0 - 2026-10-24 - untested - first public release
 
 ### Added

@@ -2,7 +2,7 @@
 
 `mo2_mcp.py` (the `mo2-mcp` command once installed) exposes the plugin's commands to any AI agent that speaks the
 [Model Context Protocol](https://modelcontextprotocol.io) - Claude Desktop, Claude Code, Cursor and others. The agent
-sees twelve tools; each is one command of the plugin's protocol ([PROTOCOL.md](PROTOCOL.md)), sent through the same
+sees thirteen tools; each is one command of the plugin's protocol ([PROTOCOL.md](PROTOCOL.md)), sent through the same
 client `mo2-ctl` uses. The server talks to nothing but the running MO2 on 127.0.0.1.
 
 ## 1. Install
@@ -128,15 +128,29 @@ Exit codes follow mo2-ctl's: 0 answered, 1 the tool returned an error, 3 a refus
 | `info` | - | instance, profile, game, plugin version and protocol, the commands, `in_use` and `in_use_why` |
 | `profiles` | - | profile names and the current one |
 | `mods` | `active_only` (default false) | the mods of the current profile, left-pane order: name, active, separator |
-| `plugins` | - | the plugins in load order: name, active, origin |
+| `plugins` | `include_unlisted` (default false) | the plugins in load order: name, active, origin; `include_unlisted` also lists plugin files the profile does not have, with `in_profile` and `mod_active` |
 | `executables` | - | MO2's Run list: title, binary |
 | `overwrite` | `limit` (default 500) | the files in Overwrite |
 | `backups` | - | the profile backups the plugin made, newest first |
-| `set_mods` | `names`, `active`, `confirm` | tick or untick mods (names exactly as `mods` returns them) |
-| `set_plugins` | `names`, `active`, `confirm` | tick or untick plugins; plugins.txt is written at once |
+| `set_mods` | `names`, `active`, `confirm` | tick or untick mods; names are matched case-insensitively, and an unknown one fails the call with the closest name the profile has |
+| `set_plugins` | `names`, `active`, `confirm` | tick or untick plugins; plugins.txt is written at once. A plugin whose mod is not ticked is not in the profile at all - tick the mod first (below) |
 | `select_profile` | `name`, `confirm` | switch profile through MO2's own profile box |
 | `refresh` | `save`, `confirm` | MO2's Refresh; `save: true` writes modlist.txt first |
 | `run` | `executable` or `binary`, `args`, `cwd`, `profile`, `confirm` | start a program through MO2's VFS; returns `pid` at once, never waits |
+| `call` | `plugin`, `action`, `args`, `confirm` | hand `action` and `args` to another MO2 plugin's command handler; `result` is what it returned. This is how a mod-order plugin such as `MO2PriorityControl` moves a mod up or down (below) |
+
+**`call` reaches a feature this server does not wrap.** `info` lists the plugins loaded in MO2 that have a command
+handler (`extensions`); `call` passes the action to one of them and returns its JSON in `result`. A mod-order plugin is
+the working example: `plugin="MO2PriorityControl"` with `action` one of `list`, `set`, `move`, `place_above`,
+`place_below`, `bounds`, and `args` as that plugin documents. `PROTOCOL.md`'s `mm` (plugin `MO2ModlistManager`) is the
+same call with a fixed plugin name. An unknown plugin name comes back as the plugin's own words, "has no command
+handler loaded in this MO2". `call` is a write: it is refused while MO2 is in use unless `confirm` says who approved
+it, and the profile's list files are backed up first.
+
+**An unticked mod has no plugins in the profile.** MO2 mounts only ticked mods, so the esp/esm/esl files of an unticked
+mod are not in the plugin list: `set_plugins` for one is an error that names the mod ("provided by the inactive mod
+..."), says to tick the mod first, and changes nothing. Tick the mod with `set_mods`, then the plugin; `plugins
+include_unlisted=true` shows such files without changing anything.
 
 Every reply is the plugin's own JSON reply (PROTOCOL.md section 3). A write that changed the profile also carries
 `backup`, the folder its list files were copied to first.
@@ -173,7 +187,9 @@ machine where no one is sitting at MO2 while agents work.
 | `MO2 is not reachable: nothing answered on 127.0.0.1:...` | MO2 is closing, or the port was taken over; restart MO2 |
 | `no MO2 instance: start mo2-mcp with --instance ...` | the server was started without an instance (section 2) |
 | `refused: wrong or missing token` | MO2 restarted since the channel file was read - the server reads the file on every call, so this clears itself |
-| `MO2 answered with an error: ValueError: not in this profile: X` | a name that is not in the current profile; `mods` / `plugins` list the exact names |
+| `MO2 answered with an error: ValueError: not in this profile: X (provided by the inactive mod 'M'); tick that mod first ...; nothing was changed` | the plugin's file belongs to a mod that is not ticked: an unticked mod's files are not mounted, so the plugin is not in the profile. Tick the mod with `set_mods`, then the plugin, or look at `plugins include_unlisted=true` |
+| `... not in this profile: X (the mod 'M' is ticked but MO2 has not listed this plugin yet - run refresh, then try again)` | the mod is on but MO2's plugin list has not caught up; refresh (MO2 rebuilds the list asynchronously, so a second refresh may be needed) |
+| `... not in this profile: X (no mod folder in this instance has a file of that name; closest in this profile: 'Y')` | a typo, or a name no mod provides; `mods` / `plugins` list the exact names |
 
 ## 7. Logging
 

@@ -35,7 +35,7 @@ import os
 import socket
 import sys
 
-__version__ = "1.0.0"    # issued by version-gate.ps1; never typed by hand
+__version__ = "1.0.1"    # issued by version-gate.ps1; never typed by hand
 CHANNEL = os.path.join("plugins", "data", "ApocryphaAgentControl", "channel.json")
 
 

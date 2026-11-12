@@ -6,10 +6,12 @@ real loopback server, exactly as the plugin's socket drives it - no MO2, no Qt. 
   1  mo2_ctl.py end to end over 127.0.0.1 (and through the tools\mo2-ctl.py launcher): info; key=value and --json args;
      a refusal exits 3; --confirm reaches the core; a stale token exits 3; a channel file naming another host, a dead MO2
      pid and no channel file exit 4
-  2  the MCP server in-process: the twelve tools and their schemas (every write tool requires `confirm`); reads work
+  2  the MCP server in-process: the thirteen tools and their schemas (every write tool requires `confirm`); reads work
      while MO2 is in use; a write is refused then, word for word, and goes through with confirm (logged by the core);
-     the core's own errors come back as errors; run needs executable or binary; a missing channel and a missing
-     instance are clear errors
+     the core's own errors come back as errors; a name the profile does not have is explained (the unticked mod that
+     provides it, "run refresh", or the closest name), names match case-insensitively, a failed name check leaves no
+     backup folder, and plugins include_unlisted shows the files the profile does not have; run needs executable or
+     binary; a missing channel and a missing instance are clear errors
   3  the MCP server over stdio, as a client starts it: initialize, list_tools, info, a refused write (isError)
 """
 import asyncio
@@ -67,10 +69,17 @@ class FakeOrg:
                 open(os.path.join(root, "profiles", p, f), "w").write("%s of %s\n" % (f, p))
         os.makedirs(os.path.join(root, "overwrite", "SKSE"), exist_ok=True)
         open(os.path.join(root, "overwrite", "SKSE", "x.log"), "w").write("x")
+        # the mods folder: A is ticked and holds a listed plugin (A.esp) and one MO2 has not listed yet (C.esp); B is
+        # not ticked, so its D.esp is in no profile at all - the case set_plugins must explain instead of just refusing
+        for mod, files in (("A", ("A.esp", "C.esp")), ("B", ("B.esp", "D.esp"))):
+            os.makedirs(os.path.join(root, "mods", mod), exist_ok=True)
+            for f in files:
+                open(os.path.join(root, "mods", mod, f), "w").write("")
 
     def base_path(self): return self.root
     def profile_name(self): return self.prof
     def profile_dir(self): return os.path.join(self.root, "profiles", self.prof)
+    def mods_path(self): return os.path.join(self.root, "mods")
     def game_name(self): return "Skyrim Special Edition"
     def profiles(self): return ["Default", "Test"]
     def mods(self): return [{"name": k, "active": v, "separator": k.endswith("_separator")} for k, v in self.mod_state.items()]
@@ -96,7 +105,9 @@ class FakeOrg:
         return {"started": target, "pid": 4242}
 
     def extensions(self): return []
-    def call_plugin(self, plugin, action, args): return {"plugin": plugin, "action": action}
+    def call_plugin(self, plugin, action, args):
+        self.calls.append(("call_plugin", plugin, action))
+        return {"plugin": plugin, "action": action}
 
 
 INST = os.path.join(T, "inst")
@@ -105,7 +116,7 @@ busy = {"v": False}
 logged = []
 d = core.Dispatcher(org, "tok123", os.path.join(INST, "plugins", "data", "ApocryphaAgentControl", "backups"),
                     lambda: (busy["v"], "MO2 is in front and the last input was 0.5 min ago (Windows' idle clock)"),
-                    logged.append, "1.0.0")
+                    logged.append, "1.0.1")
 
 # the loopback server: one line in, one line out, the way the plugin's QTcpServer does it
 srv = socket.socket()
@@ -137,7 +148,7 @@ CH = os.path.join(CHDIR, "channel.json")
 
 
 def write_channel(**kw):
-    c = {"host": "127.0.0.1", "port": PORT, "token": "tok123", "pid": os.getpid(), "instance": INST, "version": "1.0.0",
+    c = {"host": "127.0.0.1", "port": PORT, "token": "tok123", "pid": os.getpid(), "instance": INST, "version": "1.0.1",
          "protocol": 1}
     c.update(kw)
     json.dump(c, open(CH, "w"))
@@ -219,16 +230,18 @@ def schema(tool):
 
 tools = {t.name: t for t in asyncio.run(mo2_mcp.server.list_tools())}
 READS = {"info", "profiles", "mods", "plugins", "executables", "overwrite", "backups"}
-WRITES = {"set_mods", "set_plugins", "select_profile", "refresh", "run"}
-ok(set(tools) == READS | WRITES, "the twelve tools: seven reads, five writes", sorted(tools))
+WRITES = {"set_mods", "set_plugins", "select_profile", "refresh", "run", "call"}
+ok(set(tools) == READS | WRITES, "the thirteen tools: seven reads, six writes", sorted(tools))
 ok(all("confirm" in (schema(tools[w]).get("required") or []) for w in WRITES), "every write tool requires `confirm`",
    {w: schema(tools[w]).get("required") for w in WRITES})
 ok(not any("confirm" in schema(tools[r]).get("properties", {}) for r in READS), "no read tool takes confirm")
 ok(all(tools[t].description for t in tools), "every tool has a description")
+ok("include_unlisted" in schema(tools["plugins"]).get("properties", {}), "plugins takes include_unlisted",
+   schema(tools["plugins"]))
 
 mo2_mcp.SETTINGS["instance"] = INST
 r = call("info")
-ok(isinstance(r, dict) and r["profile"] == "Default" and r["version"] == "1.0.0" and r["in_use"] is False,
+ok(isinstance(r, dict) and r["profile"] == "Default" and r["version"] == "1.0.1" and r["in_use"] is False,
    "info returns the plugin's reply as structured data", r)
 r = call("mods", {"active_only": True})
 ok(isinstance(r, dict) and [m["name"] for m in r["mods"]] == ["A"], "mods active_only", r)
@@ -258,11 +271,52 @@ r = call("refresh", {"save": False, "confirm": ""})
 ok(isinstance(r, str) and "refused" in r, "refresh refused the same way", r)
 r = call("run", {"executable": "SKSE", "confirm": ""})
 ok(isinstance(r, str) and "refused" in r and not any(c[0] == "run" for c in org.calls), "run refused the same way", r)
+r = call("call", {"plugin": "MO2PriorityControl", "action": "list", "confirm": ""})
+ok(isinstance(r, str) and "refused" in r and not any(c[0] == "call_plugin" for c in org.calls),
+   "call refused the same way - it reaches a write another plugin does", r)
 r = call("set_mods", {"names": ["B"], "active": True, "confirm": "the user, in chat"})
 ok(isinstance(r, dict) and r["set"] == ["B"] and org.mod_state["B"] is True and os.path.isdir(r["backup"]),
    "with confirm the write goes through and names its backup folder", r)
 ok(any("set_mods" in x and "confirm: the user, in chat" in x for x in logged), "... and the core logged the confirm note", logged[-3:])
 busy["v"] = False
+
+r = call("set_mods", {"names": ["B"], "active": False, "confirm": ""})
+ok(isinstance(r, dict) and org.mod_state["B"] is False, "set_mods unticked B, which the plugin checks below need", r)
+bdir = os.path.join(INST, "plugins", "data", "ApocryphaAgentControl", "backups")
+before = sorted(os.listdir(bdir)) if os.path.isdir(bdir) else []
+r = call("set_plugins", {"names": ["D.esp"], "active": True, "confirm": ""})
+ok(isinstance(r, str) and "inactive mod 'B'" in r and "tick that mod first" in r and "nothing was changed" in r,
+   "a plugin of an unticked mod: the error names the mod and what to do", r)
+ok("D.esp" not in org.plugin_state, "... and nothing was written for it", org.plugin_state)
+after = sorted(os.listdir(bdir)) if os.path.isdir(bdir) else []
+ok(before == after, "a request whose names are not in the profile leaves no backup folder", after)
+r = call("set_plugins", {"names": ["C.esp"], "active": True, "confirm": ""})
+ok(isinstance(r, str) and "run refresh" in r, "a plugin a ticked mod has but MO2 has not listed: run refresh", r)
+r = call("set_plugins", {"names": ["Nowhere.esp"], "active": True, "confirm": ""})
+ok(isinstance(r, str) and "no mod folder in this instance has a file of that name" in r and "closest" not in r,
+   "a name no mod has, and no near miss to offer", r)
+r = call("set_plugins", {"names": ["B.esp", "D.esp"], "active": True, "confirm": ""})
+ok(isinstance(r, str) and "inactive mod 'B'" in r and org.plugin_state["B.esp"] is False,
+   "one name that is not in the profile fails the whole call, nothing written", r)
+r = call("set_mods", {"names": ["Sep_separato"], "active": True, "confirm": ""})
+ok(isinstance(r, str) and "closest in this profile: 'Sep_separator'" in r,
+   "a mod name near one the profile has gets it as the suggestion", r)
+r = call("set_mods", {"names": ["a"], "active": True, "confirm": ""})
+ok(isinstance(r, dict) and r["set"] == ["A"] and org.mod_state["A"] is True, "mod names are matched case-insensitively", r)
+r = call("set_plugins", {"names": ["b.ESP"], "active": True, "confirm": ""})
+ok(isinstance(r, dict) and r["set"] == ["B.esp"] and org.plugin_state["B.esp"] is True,
+   "plugin names are matched case-insensitively, and the reply has the profile's spelling", r)
+r = call("plugins", {"include_unlisted": True})
+listed = {p["name"]: p for p in r["plugins"]}
+ok(listed.get("D.esp", {}).get("origin") == "B" and listed["D.esp"]["in_profile"] is False
+   and listed["D.esp"]["mod_active"] is False, "plugins include_unlisted lists an unticked mod's plugin",
+   listed.get("D.esp"))
+ok(listed.get("C.esp", {}).get("mod_active") is True and listed["C.esp"]["active"] is False,
+   "... and one a ticked mod has but MO2 has not listed", listed.get("C.esp"))
+ok(all("in_profile" in p and "mod_active" in p for p in r["plugins"]),
+   "... every entry says in_profile and mod_active", r)
+r = call("plugins")
+ok(all("in_profile" not in p for p in r["plugins"]), "plugins without include_unlisted keeps the reply shape", r)
 
 r = call("set_mods", {"names": ["Nope"], "active": True, "confirm": ""})
 ok(isinstance(r, str) and r.startswith("ERROR MO2 answered with an error") and "not in this profile" in r,
@@ -279,6 +333,14 @@ r = call("run", {"confirm": ""})
 ok(isinstance(r, str) and "needs executable" in r and not any(c[0] == "run" for c in org.calls), "run without executable or binary is an error before anything is sent", r)
 r = call("run", {"executable": "SKSE", "profile": "Test", "args": ["-x"], "confirm": ""})
 ok(isinstance(r, dict) and r["pid"] == 4242 and org.calls[-1] == ("run", "SKSE", ["-x"], "Test"), "run starts through MO2 and returns the pid", r)
+r = call("call", {"plugin": "MO2PriorityControl", "action": "place_above",
+                  "args": {"name": "A", "target": "B"}, "confirm": ""})
+ok(isinstance(r, dict) and r["plugin"] == "MO2PriorityControl"
+   and r["result"] == {"plugin": "MO2PriorityControl", "action": "place_above"}
+   and os.path.isdir(r["backup"]) and org.calls[-1] == ("call_plugin", "MO2PriorityControl", "place_above"),
+   "call hands the action to another plugin, returns its result, and backs the profile up first", r)
+r = call("call", {"plugin": "", "action": "list", "confirm": ""})
+ok(isinstance(r, str) and "call needs plugin" in r, "call without a plugin is an error before anything is sent", r)
 r = call("backups")
 ok(isinstance(r, dict) and len(r["backups"]) >= 3 and all("plugins.txt" in b["files"] for b in r["backups"]), "backups lists the folders the writes made", r)
 
@@ -321,7 +383,7 @@ async def over_stdio():
 init, names, info_r, refused = asyncio.run(over_stdio())
 server_info = attr(init, "serverInfo", "server_info")
 ok(server_info.name == "MO2 Agent Control", "stdio: initialize names the server", server_info)
-ok(names == sorted(READS | WRITES), "stdio: list_tools shows the twelve tools", names)
+ok(names == sorted(READS | WRITES), "stdio: list_tools shows the thirteen tools", names)
 text = json.loads(info_r.content[0].text)
 ok(not attr(info_r, "isError", "is_error") and text["profile"] == "Test" and text["protocol"] == 1, "stdio: info round trip", info_r)
 ok(attr(refused, "isError", "is_error") and "refused: MO2 is in use" in refused.content[0].text and org.mod_state["A"] is True,
