@@ -11,6 +11,7 @@ Qt's "offscreen" platform is used, so no window appears on the screen.
      of hanging; the dialog is then answered by text (two buttons share the accept role, so role alone is refused) and
      by role; nothing behind an open modal can be acted on
   4  ui_set: checkbox, edit, combo (by text and by index), spin box, tab bar - each read back; wrong types refused
+  6  a dialog inside a dialog: a tool window run with exec() and a question asked from inside it
   5  safety: an ambiguous locator is refused with the candidates listed, path and index pick one; a disabled button is
      refused; a write while MO2 is in use is refused without confirm; a click backs the profile's lists up first
 """
@@ -30,7 +31,7 @@ sys.path.insert(0, REPO)
 import mo2_ctl  # noqa: E402
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal  # noqa: E402
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFormLayout, QGroupBox, QLabel, QLineEdit,  # noqa: E402
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QLabel, QLineEdit,  # noqa: E402
                              QMessageBox, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
 PLUGIN = os.path.join(REPO, "plugins", "ApocryphaAgentControl")
@@ -124,6 +125,24 @@ def do_ask():
     seen["ask"].append("yes" if r == QMessageBox.StandardButton.Yes else "no")
 
 
+def do_tool():
+    """The shape of a plugin tool's window: a dialog run with exec(), holding a button that asks a question."""
+    dlg = QDialog(win)
+    dlg.setWindowTitle("Tool")
+    dl = QVBoxLayout(dlg)
+    go, close = QPushButton("Go"), QPushButton("Close")
+    go.clicked.connect(lambda: seen.setdefault("go", []).append(
+        QMessageBox.question(dlg, "Sure?", "Do it?") == QMessageBox.StandardButton.Yes))
+    close.clicked.connect(dlg.accept)
+    dl.addWidget(go), dl.addWidget(close)
+    dlg.exec()
+    seen["tool_closed"] = True
+
+
+tool_btn = QPushButton("Open tool")
+tool_btn.setObjectName("toolBtn")
+tool_btn.clicked.connect(do_tool)
+lay.addWidget(tool_btn)
 apply_btn.clicked.connect(do_apply)
 ask_btn.clicked.connect(do_ask)
 win.show()
@@ -290,6 +309,25 @@ def steps():
     ok(r["ok"] and seen["ping"] == 3 and any("ui_click" in x and "confirm: the user, in chat" in x for x in logged),
        "with confirm it goes through and is logged", (r, logged[-2:]))
     busy["v"] = False
+    # ---- 6  a dialog inside a dialog: a tool window run with exec(), and a question asked from inside it
+    r = req("ui_click", name="toolBtn")
+    ok(r["ok"] and r["returned"] is False and r["modal"]["title"] == "Tool"
+       and [(x["text"], x["role"]) for x in r["modal"]["buttons"]] == [("Go", ""), ("Close", "")],
+       "a tool window run with exec() is itself the modal: its push buttons are listed", r)
+    r = req("ui_click", text="Go")
+    ok(r["ok"] and r["returned"] is False and r["modal"]["title"] == "Sure?", "a click inside it opens a question on top", r)
+    r = req("ui_click", text="Close")
+    ok(not r["ok"] and "no visible" in r["error"] and "tool_closed" not in seen, "the tool window's own buttons are out of reach while the question is open", r)
+    r = req("ui_answer_modal", role="yes", expect="Do it?")
+    time.sleep(0.3)
+    ok(r["ok"] and r["closed"] is True and r["modal"] and r["modal"]["title"] == "Tool" and seen["go"] == [True]
+       and [x["text"] for x in r["modal"]["buttons"]] == ["Go", "Close"],
+       "answering the question hands the tool window back as the modal", (r, seen))
+    r = req("ui_click", text="Close")
+    time.sleep(0.3)
+    ok(r["ok"] and r["returned"] is True and seen.get("tool_closed") is True, "and the tool window closes by its own button", (r, seen))
+    r = req("ui_tree")
+    ok(r["ok"] and r["modal"] is None, "nothing modal is left open", r["modal"])
     r = req("ui_tree", window="Test Window", limit=0)
     ok(not r["ok"] and "limit" in r["error"], "a bad limit is an error, not a crash", r)
 

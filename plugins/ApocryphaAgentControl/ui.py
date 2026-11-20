@@ -167,11 +167,15 @@ def modal_buttons(dlg):
     """[(button, role name)] of a dialog: a message box's own buttons, else its button boxes', else its push buttons."""
     if isinstance(dlg, QMessageBox):
         return [(b, ROLES.get(_num(dlg.buttonRole(b)), "invalid")) for b in dlg.buttons()]
+    # only what sits in THIS dialog: a child dialog (a question it asked, closed but not yet deleted) is still among
+    # its children, and that one's buttons are not this dialog's
     out = []
     for box in dlg.findChildren(QDialogButtonBox):
-        out += [(b, ROLES.get(_num(box.buttonRole(b)), "invalid")) for b in box.buttons()]
+        if box.window() is dlg and box.isVisible():
+            out += [(b, ROLES.get(_num(box.buttonRole(b)), "invalid")) for b in box.buttons()]
     if not out:
-        out = [(b, "") for b in dlg.findChildren(QAbstractButton) if kind_of(b) == "button" and b.isVisible()]
+        out = [(b, "") for b in dlg.findChildren(QAbstractButton)
+               if kind_of(b) == "button" and b.isVisible() and b.window() is dlg]
     return out
 
 
