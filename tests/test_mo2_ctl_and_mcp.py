@@ -6,7 +6,7 @@ real loopback server, exactly as the plugin's socket drives it - no MO2, no Qt. 
   1  mo2_ctl.py end to end over 127.0.0.1 (and through the tools\mo2-ctl.py launcher): info; key=value and --json args;
      a refusal exits 3; --confirm reaches the core; a stale token exits 3; a channel file naming another host, a dead MO2
      pid and no channel file exit 4
-  2  the MCP server in-process: the twelve tools and their schemas (every write tool requires `confirm`); reads work
+  2  the MCP server in-process: the sixteen tools and their schemas (every write tool requires `confirm`); reads work
      while MO2 is in use; a write is refused then, word for word, and goes through with confirm (logged by the core);
      the core's own errors come back as errors; run needs executable or binary; a missing channel and a missing
      instance are clear errors
@@ -218,9 +218,9 @@ def schema(tool):
 
 
 tools = {t.name: t for t in asyncio.run(mo2_mcp.server.list_tools())}
-READS = {"info", "profiles", "mods", "plugins", "executables", "overwrite", "backups"}
-WRITES = {"set_mods", "set_plugins", "select_profile", "refresh", "run"}
-ok(set(tools) == READS | WRITES, "the twelve tools: seven reads, five writes", sorted(tools))
+READS = {"info", "profiles", "mods", "plugins", "executables", "overwrite", "backups", "ui_tree"}
+WRITES = {"set_mods", "set_plugins", "select_profile", "refresh", "run", "ui_click", "ui_answer_modal", "ui_set"}
+ok(set(tools) == READS | WRITES, "the sixteen tools: eight reads, eight writes", sorted(tools))
 ok(all("confirm" in (schema(tools[w]).get("required") or []) for w in WRITES), "every write tool requires `confirm`",
    {w: schema(tools[w]).get("required") for w in WRITES})
 ok(not any("confirm" in schema(tools[r]).get("properties", {}) for r in READS), "no read tool takes confirm")
@@ -321,7 +321,7 @@ async def over_stdio():
 init, names, info_r, refused = asyncio.run(over_stdio())
 server_info = attr(init, "serverInfo", "server_info")
 ok(server_info.name == "MO2 Agent Control", "stdio: initialize names the server", server_info)
-ok(names == sorted(READS | WRITES), "stdio: list_tools shows the twelve tools", names)
+ok(names == sorted(READS | WRITES), "stdio: list_tools shows the sixteen tools", names)
 text = json.loads(info_r.content[0].text)
 ok(not attr(info_r, "isError", "is_error") and text["profile"] == "Test" and text["protocol"] == 1, "stdio: info round trip", info_r)
 ok(attr(refused, "isError", "is_error") and "refused: MO2 is in use" in refused.content[0].text and org.mod_state["A"] is True,

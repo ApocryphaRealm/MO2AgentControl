@@ -2,7 +2,7 @@
 
 `mo2_mcp.py` (the `mo2-mcp` command once installed) exposes the plugin's commands to any AI agent that speaks the
 [Model Context Protocol](https://modelcontextprotocol.io) - Claude Desktop, Claude Code, Cursor and others. The agent
-sees twelve tools; each is one command of the plugin's protocol ([PROTOCOL.md](PROTOCOL.md)), sent through the same
+sees sixteen tools; each is one command of the plugin's protocol ([PROTOCOL.md](PROTOCOL.md)), sent through the same
 client `mo2-ctl` uses. The server talks to nothing but the running MO2 on 127.0.0.1.
 
 ## 1. Install
@@ -137,6 +137,10 @@ Exit codes follow mo2-ctl's: 0 answered, 1 the tool returned an error, 3 a refus
 | `select_profile` | `name`, `confirm` | switch profile through MO2's own profile box |
 | `refresh` | `save`, `confirm` | MO2's Refresh; `save: true` writes modlist.txt first |
 | `run` | `executable` or `binary`, `args`, `cwd`, `profile`, `confirm` | start a program through MO2's VFS; returns `pid` at once, never waits |
+| `ui_tree` | `window`, `path`, `kinds`, `labels`, `limit` | the visible windows, the open modal dialog (text, buttons, roles) and the controls of a window |
+| `ui_click` | `name` and/or `text`, `window`, `path`, `kind`, `index`, `confirm` | press one button; if that opens a dialog the reply has `returned: false` and `modal` |
+| `ui_answer_modal` | `role` or `text`, `expect`, `confirm` | press a button of the open modal dialog |
+| `ui_set` | `value`, `name` and/or `text`, `window`, `path`, `kind`, `index`, `confirm` | set a checkbox, edit, combo box, spin box or tab, and read it back |
 
 Every reply is the plugin's own JSON reply (PROTOCOL.md section 3). A write that changed the profile also carries
 `backup`, the folder its list files were copied to first.
@@ -144,8 +148,8 @@ Every reply is the plugin's own JSON reply (PROTOCOL.md section 3). A write that
 ## 5. The two safety rules, as the agent meets them
 
 **Writes are refused while you are using MO2.** When MO2's window is in front and you used the keyboard or mouse in
-the last few minutes (5 by default), the plugin refuses `set_mods`, `set_plugins`, `select_profile`, `refresh` and
-`run`. The agent gets the refusal as the tool's error, in the plugin's words:
+the last few minutes (5 by default), the plugin refuses `set_mods`, `set_plugins`, `select_profile`, `refresh`, `run`,
+`ui_click`, `ui_answer_modal` and `ui_set`. The agent gets the refusal as the tool's error, in the plugin's words:
 
 ```
 refused: MO2 is in use (MO2 is in front and the last input was 0.4 min ago (Windows' idle clock)) - send confirm with a

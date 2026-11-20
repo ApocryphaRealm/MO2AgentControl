@@ -36,6 +36,20 @@ its shape. Read 2026-10-24 for MO2 **2.5.2**, for 1.0.0.
 | set_plugins | refuses the game's primary plugins (`managedGame().primaryPlugins()`), which MO2 never changes or lists; `setState` for each, then plugins.txt is written in MO2's own shape (`*` for active) at once and MO2 re-reads it with `refresh(False)` - because MO2's own write comes late, and a refresh before it read the old file back |
 | settings | three `PluginSetting`s read through `pluginSetting`; their descriptions are translated, and since `settings()` is called before `init()`, the language is read from MO2's data folder (the application's `dataPath` property) on first use |
 
+## The window commands (1.1.0) - what they rely on
+
+`ui_tree`, `ui_click`, `ui_answer_modal` and `ui_set` add to no MO2 feature and hook none: they read and call Qt widgets
+(`QApplication.topLevelWidgets`, `findChildren`, `QAbstractButton.click`, `QApplication.activeModalWidget`), MO2's own
+and any plugin's alike. No MO2 source was read for them, and nothing in them depends on a widget MO2 names. What they
+rely on is Qt's behaviour, proven by `tests/test_ui_widgets.py` against the plugin's own socket and widget code:
+
+- a modal dialog's `exec()` runs a nested event loop on the GUI thread, and that loop still delivers the channel's
+  socket notifications and timers - so a request is answered while a dialog is open;
+- a press that opens a dialog does not return until the dialog closes - so every window write runs from a zero timer
+  after its request has been read, and replies when it returns or after `wait_ms` with the open dialog described.
+
+No timer is parented to an MO2 widget, no application-wide event filter is installed and no model signal is connected.
+
 ## Departures to revisit
 
 - set_plugins writes plugins.txt itself instead of waiting for MO2's own save. If a later MO2 offers a call that saves the

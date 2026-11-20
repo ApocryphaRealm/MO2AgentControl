@@ -40,14 +40,17 @@ log = logging.getLogger("mo2-mcp")
 SETTINGS = {"instance": "", "timeout": 600.0}     # filled by main(); the tools read them at call time
 
 INSTRUCTIONS = """Operate the user's running Mod Organizer 2 through the MO2 Agent Control plugin.
-Reads (info, profiles, mods, plugins, executables, overwrite, backups) always work.
-Writes (set_mods, set_plugins, select_profile, refresh, run) are refused by MO2 while the user is using it - its window
+Reads (info, profiles, mods, plugins, executables, overwrite, backups, ui_tree) always work.
+Writes (set_mods, set_plugins, select_profile, refresh, run, ui_click, ui_answer_modal, ui_set) are refused by MO2 while the user is using it - its window
 in front and keyboard or mouse input in the last few minutes. If a write is refused, tell the user what you want to
 change and ask whether to go ahead; only after they agree, call it again with `confirm` set to a short note saying who
 approved it (for example "the user, in chat"). Never fill in confirm on your own.
 Names passed to set_mods / set_plugins must match exactly (case included) what mods / plugins return.
 Every write that changes the profile backs up modlist.txt, plugins.txt and loadorder.txt first; the reply names the folder.
-run starts a program through MO2's virtual file system and returns at once with its process id; it never waits."""
+run starts a program through MO2's virtual file system and returns at once with its process id; it never waits.
+The ui_ tools reach MO2's windows and dialogs without the mouse: ui_tree (a read) shows the windows, the open modal
+dialog and the controls; ui_click, ui_answer_modal and ui_set are writes. Use them only for what the tools above cannot
+do, read a dialog with ui_tree before answering it, and tell the user what it asks first."""
 
 server = Server("MO2 Agent Control", instructions=INSTRUCTIONS)
 
@@ -186,6 +189,76 @@ def run(confirm: str, executable: str = "", binary: str = "", args: list[str] = 
     if profile:
         a["profile"] = profile
     return request("run", a, confirm)
+
+
+# ---- MO2's windows: for what the commands above cannot do - a plugin's window, a dialog that is waiting for an answer ----
+def _locator(name, text, window, path, kind, index):
+    a: dict = {}
+    for k, v in (("name", name), ("text", text), ("window", window), ("path", path), ("kind", kind)):
+        if v:
+            a[k] = v
+    if index >= 0:
+        a["index"] = index
+    return a
+
+
+@server.tool()
+def ui_tree(window: str = "", path: str = "", kinds: list[str] = [], labels: bool = False, limit: int = 300) -> dict:
+    """What is on MO2's screen: windows (every visible window), modal (the open modal dialog - its title, text and
+    buttons with their roles - or null) and controls (buttons, checkboxes, radio buttons, edits, combo boxes, spin
+    boxes, tab bars: kind, name = objectName, text, enabled, value / checked, where). With no window given it lists the
+    open modal dialog's controls, else every window's. window: a title or objectName. path: "Outer > Inner" narrows
+    to a group box, tab or named widget. kinds: only these kinds. labels: also list plain text labels."""
+    a: dict = {"limit": int(limit), "labels": bool(labels)}
+    if window:
+        a["window"] = window
+    if path:
+        a["path"] = path
+    if kinds:
+        a["kinds"] = list(kinds)
+    return request("ui_tree", a)
+
+
+@server.tool()
+def ui_click(confirm: str, name: str = "", text: str = "", window: str = "", path: str = "", kind: str = "",
+             index: int = -1) -> dict:
+    """Press one button in an MO2 window, found by name (objectName) and/or text exactly as ui_tree shows them; add
+    window, path or index when more than one matches (a locator that matches several is refused, nothing is pressed).
+    If the press opens a dialog the reply has returned: false and modal: the dialog - answer it with ui_answer_modal.
+    While a modal dialog is open only that dialog can be acted on. Prefer set_mods / set_plugins / select_profile /
+    refresh / run when they do the job. confirm: who approved this while MO2 is in use (ask the user first; "" when no
+    one has)."""
+    return request("ui_click", _locator(name, text, window, path, kind, index), confirm)
+
+
+@server.tool()
+def ui_answer_modal(confirm: str, role: str = "", text: str = "", expect: str = "") -> dict:
+    """Press a button of the open modal dialog: by role (accept, reject, yes, no, apply, destructive, action, help,
+    reset) or by text (the button's text) - one of them; when two buttons share the role, use text. expect: a piece of
+    the dialog's title or text that must be there, so the wrong dialog is never answered. Read the dialog first with
+    ui_tree and tell the user what it asks before answering anything that changes or deletes. confirm: who approved
+    this while MO2 is in use (ask the user first; "" when no one has)."""
+    a: dict = {}
+    if role:
+        a["role"] = role
+    if text:
+        a["text"] = text
+    if expect:
+        a["expect"] = expect
+    return request("ui_answer_modal", a, confirm)
+
+
+@server.tool()
+def ui_set(confirm: str, value: bool | int | float | str, name: str = "", text: str = "", window: str = "",
+           path: str = "", kind: str = "", index: int = -1) -> dict:
+    """Set a control in an MO2 window and read it back: a checkbox or radio button (true / false), an edit or text box
+    (text), a combo box (an item's text or index), a spin box (a number), a tab bar (a tab's text or index). The control
+    is found like ui_click's button; for an edit, combo or spin box, text is its label. The reply has value (what the
+    control now holds) and applied. confirm: who approved this while MO2 is in use (ask the user first; "" when no
+    one has)."""
+    a = _locator(name, text, window, path, kind, index)
+    a["value"] = value
+    return request("ui_set", a, confirm)
 
 
 # ---- start ----------------------------------------------------------------------------------------------------------------

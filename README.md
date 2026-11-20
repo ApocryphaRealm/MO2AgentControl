@@ -85,7 +85,7 @@ mo2-ctl --instance "D:\MO2" backups
 
 ## For AI agents: the MCP server
 
-`mo2-mcp` (`mo2_mcp.py`) serves the same commands as twelve MCP tools over stdio: `info`, `profiles`, `mods`,
+`mo2-mcp` (`mo2_mcp.py`) serves the same commands as sixteen MCP tools over stdio: `info`, `profiles`, `mods`,
 `plugins`, `executables`, `overwrite`, `backups`, `set_mods`, `set_plugins`, `select_profile`, `refresh`, `run`.
 For Claude Desktop, add to `%APPDATA%\Claude\claude_desktop_config.json`:
 
@@ -114,6 +114,25 @@ The plugin's rules carry through unchanged: reads always work; a write is refuse
 agent gets the refusal in the plugin's words. Every write tool has a required `confirm` argument - the note the plugin
 logs saying who approved a change made while MO2 is in use. The server never fills it in: the agent has to ask you and
 pass it, and an empty note means the change goes through only while MO2 is idle.
+
+## Windows and dialogs, without the mouse
+
+Since 1.1.0 four more commands reach what MO2's API does not: a plugin's own window, a settings dialog, a question
+waiting for an answer. `ui_tree` shows the visible windows, the open dialog (its text and buttons) and the controls;
+`ui_click` presses a button; `ui_answer_modal` answers the open dialog by role or by text; `ui_set` sets a checkbox,
+edit, combo box, spin box or tab and reads it back. They call the widgets' own methods - no mouse or keyboard input is
+sent and no window is raised - and they are answered even while a dialog is open.
+
+```
+mo2-ctl --instance "D:\MO2" ui_tree
+mo2-ctl --instance "D:\MO2" ui_click window="My Plugin" text="Apply"
+mo2-ctl --instance "D:\MO2" ui_answer_modal text="Cancel"
+mo2-ctl --instance "D:\MO2" ui_set window="My Plugin" text="Dry run" value=true
+```
+
+A button name that matches more than one control is refused rather than guessed, the profile's lists are backed up
+before a press, and the in-use check applies as to every other change. Details: section 6 of
+[docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## The protocol
 

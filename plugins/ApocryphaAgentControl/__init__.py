@@ -24,23 +24,20 @@ import mobase
 try:
     from PyQt6.QtCore import QTimer
     from PyQt6.QtGui import QIcon
-    from PyQt6.QtNetwork import QHostAddress, QTcpServer
     from PyQt6.QtWidgets import QApplication, QComboBox, QMainWindow, QMessageBox
-    LOCALHOST = QHostAddress.SpecialAddress.LocalHost
 except ImportError:  # MO2 before 2.5
     from PyQt5.QtCore import QTimer
     from PyQt5.QtGui import QIcon
-    from PyQt5.QtNetwork import QHostAddress, QTcpServer
     from PyQt5.QtWidgets import QApplication, QComboBox, QMainWindow, QMessageBox
-    LOCALHOST = QHostAddress.LocalHost
 
+from . import channel as channel_mod
 from . import core
+from . import ui
 
-__version__ = "1.0.0"    # issued by version-gate.ps1; never typed by hand
+__version__ = "1.1.0"    # issued by version-gate.ps1; never typed by hand
 PLUGIN_NAME = "MO2 Agent Control"
 DATA_NAME = "ApocryphaAgentControl"       # the folder name under plugins\ and plugins\data\ (clients find channel.json there)
 REGISTRY = "apocrypha_agent_registry"
-MAX_REQUEST = 1 << 20
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Languages: TR("KEY", "English") reads translations\<language>.txt beside this file ($KEY<TAB>text, UTF-16LE with a BOM).
@@ -250,6 +247,19 @@ class Mo2:
         reg = sys.modules.get(REGISTRY)
         return list(getattr(reg, "handlers", {}) or {}) if reg else []
 
+    # ---- the window commands (ui.py): MO2's own windows, any plugin's windows, and the dialogs they open
+    def ui_tree(self, args):
+        return ui.tree(args)
+
+    def ui_click(self, args):
+        return ui.click(args)
+
+    def ui_answer_modal(self, args):
+        return ui.answer_modal(args)
+
+    def ui_set(self, args):
+        return ui.set_value(args)
+
     def call_plugin(self, plugin, action, args):
         reg = sys.modules.get(REGISTRY)
         fn = getattr(reg, "handlers", {}).get(plugin) if reg else None
@@ -303,7 +313,6 @@ class AgentControl(mobase.IPluginTool):
         super().__init__()
         self._org = None
         self._server = None
-        self._sockets = []
         self._parent = None
         self._dispatcher = None
 
@@ -344,12 +353,11 @@ class AgentControl(mobase.IPluginTool):
         token = secrets.token_hex(32)
         self._dispatcher = core.Dispatcher(Mo2(self._org), token, os.path.join(self._data(), "backups"), self._presence,
                                            self._log, __version__)
-        self._server = QTcpServer()
-        if not self._server.listen(QHostAddress(LOCALHOST), 0):
-            self._log("could not listen on 127.0.0.1: %s" % self._server.errorString())
+        self._server = channel_mod.Channel(self._dispatcher, self._log)     # the socket: channel.py
+        if not self._server.listen():
+            self._log("could not listen on 127.0.0.1: %s" % self._server.error())
             return
-        self._server.newConnection.connect(self._accept)
-        channel = {"host": "127.0.0.1", "port": int(self._server.serverPort()), "token": token, "pid": os.getpid(),
+        channel = {"host": "127.0.0.1", "port": self._server.port(), "token": token, "pid": os.getpid(),
                    "instance": self._org.basePath(), "started": time.time(), "version": __version__,
                    "protocol": core.PROTOCOL}
         path = os.path.join(self._data(), "channel.json")
@@ -357,33 +365,6 @@ class AgentControl(mobase.IPluginTool):
             json.dump(channel, f)
         os.replace(path + ".tmp", path)
         self._log("%s %s listening on 127.0.0.1:%d (pid %d)" % (PLUGIN_NAME, __version__, channel["port"], channel["pid"]))
-
-    def _accept(self):
-        while self._server.hasPendingConnections():
-            sock = self._server.nextPendingConnection()
-            if not sock.peerAddress().isLoopback():
-                self._log("refused a connection from %s" % sock.peerAddress().toString())
-                sock.abort()
-                continue
-            buf = bytearray()
-            self._sockets.append(sock)
-
-            def ready(sock=sock, buf=buf):
-                buf.extend(bytes(sock.readAll()))
-                if len(buf) > MAX_REQUEST:
-                    sock.abort()
-                    return
-                if b"\n" not in buf:
-                    return
-                line = bytes(buf[:buf.index(b"\n")])
-                resp = self._dispatcher.handle(line)
-                sock.write((json.dumps(resp, ensure_ascii=False) + "\n").encode("utf-8"))
-                sock.flush()
-                sock.disconnectFromHost()
-
-            sock.readyRead.connect(ready)
-            sock.disconnected.connect(lambda sock=sock: (self._sockets.remove(sock) if sock in self._sockets else None,
-                                                         sock.deleteLater()))
 
     # ---- mobase.IPluginTool
     def name(self):
@@ -431,11 +412,11 @@ class AgentControl(mobase.IPluginTool):
         self._parent = widget
 
     def display(self):
-        listening = self._server is not None and self._server.isListening()
+        listening = self._server is not None and self._server.listening()
         if listening:
             busy, why = self._presence()
             text = TR("AC_Listening", "Listening on 127.0.0.1:{port} for mo2-ctl and other clients.\n\nChannel file:\n{path}",
-                      port=self._server.serverPort(), path=os.path.join(self._data(), "channel.json"))
+                      port=self._server.port(), path=os.path.join(self._data(), "channel.json"))
             text += "\n\n" + (TR("AC_CheckOn", "Changes are refused while you are using MO2.") if bool(self._setting(
                 "refuse_writes_while_in_use", True)) else TR("AC_CheckOff", "The in-use check is off: changes are always accepted."))
         else:

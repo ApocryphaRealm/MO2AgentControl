@@ -10,9 +10,10 @@ The plugin (__init__.py) owns the loopback socket and MO2's API; this decides wh
     plugins\data\ApocryphaAgentControl\backups\<time>-<command>\.
 
 Commands (args in a JSON object; docs\PROTOCOL.md is the full reference):
-  READ   info | profiles | mods [active_only] | plugins | overwrite [limit] | executables | backups
+  READ   info | profiles | mods [active_only] | plugins | overwrite [limit] | executables | backups | ui_tree
   WRITE  select_profile name | set_mods names[] active | set_plugins names[] active | refresh [save]
          run (executable title | binary) [args] [cwd] [profile] | call plugin action [args] | mm action [args]
+         ui_click | ui_answer_modal | ui_set   (MO2's windows and dialogs; the adapter's ui.py does the work)
          (run starts the program through MO2's virtual file system and returns its pid at once; it never waits,
          because MO2's own wait blocks its window - poll the pid)
 
@@ -26,9 +27,10 @@ import shutil
 import time
 
 PROTOCOL = 1
-READS = {"info", "profiles", "mods", "plugins", "overwrite", "executables", "backups"}
-WRITES = {"select_profile", "set_mods", "set_plugins", "refresh", "run", "call", "mm"}
-BACKED_UP = {"select_profile", "set_mods", "set_plugins", "call", "mm"}
+READS = {"info", "profiles", "mods", "plugins", "overwrite", "executables", "backups", "ui_tree"}
+WRITES = {"select_profile", "set_mods", "set_plugins", "refresh", "run", "call", "mm", "ui_click", "ui_answer_modal", "ui_set"}
+# a click can do anything a button does (Apply, Restore), so the profile's lists are copied before one
+BACKED_UP = {"select_profile", "set_mods", "set_plugins", "call", "mm", "ui_click", "ui_answer_modal"}
 PROFILE_FILES = ("modlist.txt", "plugins.txt", "loadorder.txt")
 
 
@@ -64,8 +66,15 @@ class Dispatcher:
         self.org, self.token, self.backups_root, self.presence, self.log = org, token, backups_root, presence, log
         self.version = version
 
-    def handle(self, raw):
-        """raw: one request line (bytes or str). Returns the response dict."""
+    def handle(self, raw, reply=None):
+        """raw: one request line (bytes or str). Returns the response dict.
+
+        A window command (ui_click, ui_answer_modal, ui_set) may answer LATER: pressing a button can open a modal
+        dialog, and the press then does not return until that dialog is closed - by another request on this channel.
+        Such a command hands back a function instead of a dict; it is called with `finish(result_dict_or_exception)`
+        and may call it after this method has returned. With `reply` given (the plugin's socket code passes one) handle()
+        then returns None and reply(response) is called once the command finishes; without it, a command that has not
+        finished by the time it returns is an error."""
         try:
             req = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
             if not isinstance(req, dict):
@@ -92,6 +101,8 @@ class Dispatcher:
                 if cmd in BACKED_UP:
                     backup = backup_profile(self.org.profile_dir(), self.backups_root, cmd)
             out = getattr(self, "c_" + cmd)(args)
+            if callable(out):
+                return self._later(cmd, out, backup, reply)
             if backup:
                 out["backup"] = backup
             return dict(ok=True, **out)
@@ -100,6 +111,31 @@ class Dispatcher:
         except Exception as exc:  # noqa: BLE001
             self.log("error in %s: %r" % (cmd, exc))
             return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+
+    def _later(self, cmd, start, backup, reply):
+        """Runs a command that answers through finish(); see handle()."""
+        box = []
+
+        def finish(result):
+            if box:
+                return                      # answered already (the watchdog and the action can both get here)
+            if isinstance(result, Exception):
+                self.log("error in %s: %r" % (cmd, result))
+                resp = {"ok": False, "error": "%s: %s" % (type(result).__name__, result)}
+            else:
+                resp = dict(ok=True, **result)
+                if backup:
+                    resp["backup"] = backup
+            box.append(resp)
+            if reply is not None:
+                reply(resp)
+
+        start(finish)
+        if reply is not None:
+            return None
+        if box:
+            return box[0]
+        return {"ok": False, "error": "%s answers later and needs a caller that can wait for it" % cmd}
 
     # ---- reads
     def c_info(self, a):
@@ -143,6 +179,19 @@ class Dispatcher:
                 if os.path.isdir(d):
                     out.append({"name": name, "path": d, "files": sorted(os.listdir(d))})
         return {"backups": out, "root": self.backups_root}
+
+    def c_ui_tree(self, a):
+        return self.org.ui_tree(a)
+
+    # ---- window commands (writes): the adapter may hand back a function that answers later - see handle()
+    def c_ui_click(self, a):
+        return self.org.ui_click(a)
+
+    def c_ui_answer_modal(self, a):
+        return self.org.ui_answer_modal(a)
+
+    def c_ui_set(self, a):
+        return self.org.ui_set(a)
 
     # ---- writes
     def c_select_profile(self, a):

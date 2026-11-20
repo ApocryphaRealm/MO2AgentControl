@@ -23,7 +23,8 @@ import zipfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = ["mo2_ctl.py", "mo2_mcp.py", "pyproject.toml", "tools/mo2-ctl.py", "tools/mcp_call.py", "README.md", "README.txt",
-         "CHANGELOG.md", "LICENSE", "NOTICE.md", "docs/PROTOCOL.md", "docs/MCP.md", "tests/test_mo2_ctl_and_mcp.py"]
+         "CHANGELOG.md", "LICENSE", "NOTICE.md", "docs/PROTOCOL.md", "docs/MCP.md", "tests/test_mo2_ctl_and_mcp.py",
+         "tests/test_ui_widgets.py"]
 PLUGIN = "plugins/ApocryphaAgentControl"
 SKIP_DIRS = {"__pycache__", "data"}
 
