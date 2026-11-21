@@ -13,7 +13,8 @@ Commands (args in a JSON object; docs\PROTOCOL.md is the full reference):
   READ   info | profiles | mods [active_only] | plugins | overwrite [limit] | executables | backups | ui_tree
   WRITE  select_profile name | set_mods names[] active | set_plugins names[] active | refresh [save]
          run (executable title | binary) [args] [cwd] [profile] | call plugin action [args] | mm action [args]
-         ui_click | ui_answer_modal | ui_set   (MO2's windows and dialogs; the adapter's ui.py does the work)
+         ui_click | ui_answer_modal | ui_set | ui_item | ui_menu   (MO2's windows, dialogs, lists and menus; the
+         adapter's ui.py does the work; ui_tree, ui_items and ui_menus are their reads)
          (run starts the program through MO2's virtual file system and returns its pid at once; it never waits,
          because MO2's own wait blocks its window - poll the pid)
 
@@ -27,10 +28,12 @@ import shutil
 import time
 
 PROTOCOL = 1
-READS = {"info", "profiles", "mods", "plugins", "overwrite", "executables", "backups", "ui_tree"}
-WRITES = {"select_profile", "set_mods", "set_plugins", "refresh", "run", "call", "mm", "ui_click", "ui_answer_modal", "ui_set"}
+READS = {"info", "profiles", "mods", "plugins", "overwrite", "executables", "backups", "ui_tree", "ui_items", "ui_menus"}
+WRITES = {"select_profile", "set_mods", "set_plugins", "refresh", "run", "call", "mm", "ui_click", "ui_answer_modal", "ui_set",
+          "ui_item", "ui_menu"}
 # a click can do anything a button does (Apply, Restore), so the profile's lists are copied before one
-BACKED_UP = {"select_profile", "set_mods", "set_plugins", "call", "mm", "ui_click", "ui_answer_modal"}
+# ... and a tick in MO2's own lists or a menu entry likewise
+BACKED_UP = {"select_profile", "set_mods", "set_plugins", "call", "mm", "ui_click", "ui_answer_modal", "ui_item", "ui_menu"}
 PROFILE_FILES = ("modlist.txt", "plugins.txt", "loadorder.txt")
 
 
@@ -183,6 +186,12 @@ class Dispatcher:
     def c_ui_tree(self, a):
         return self.org.ui_tree(a)
 
+    def c_ui_items(self, a):
+        return self.org.ui_items(a)
+
+    def c_ui_menus(self, a):
+        return self.org.ui_menus(a)
+
     # ---- window commands (writes): the adapter may hand back a function that answers later - see handle()
     def c_ui_click(self, a):
         return self.org.ui_click(a)
@@ -192,6 +201,12 @@ class Dispatcher:
 
     def c_ui_set(self, a):
         return self.org.ui_set(a)
+
+    def c_ui_item(self, a):
+        return self.org.ui_item(a)
+
+    def c_ui_menu(self, a):
+        return self.org.ui_menu(a)
 
     # ---- writes
     def c_select_profile(self, a):

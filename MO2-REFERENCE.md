@@ -50,6 +50,14 @@ rely on is Qt's behaviour, proven by `tests/test_ui_widgets.py` against the plug
 
 No timer is parented to an MO2 widget, no application-wide event filter is installed and no model signal is connected.
 
+The list and menu commands (1.1.0) follow the same line: `ui_items` reads `view.model()` - the proxy the view shows, so
+rows are in the order and filter on screen - with `rowCount`, `index` and `data`; `ui_item` selects through the view's
+selection model, ticks with `model.setData(index, state, CheckStateRole)` (the call Qt makes for a click on the box,
+so MO2's own models run their own handlers - enabling a mod exactly as a click does), opens with `setExpanded` and
+calls `fetchMore` for a row that loads on demand. `ui_menus` walks `QMenuBar` / `QToolBar` actions and their
+`menu()`; `ui_menu` calls `QAction.trigger()`. No MO2 source was read for them and no MO2 model is subclassed,
+connected or replaced.
+
 ## Departures to revisit
 
 - set_plugins writes plugins.txt itself instead of waiting for MO2's own save. If a later MO2 offers a call that saves the

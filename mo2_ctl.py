@@ -12,7 +12,11 @@ After `pip install mo2-agent-control` it is also the `mo2-ctl` command, and mo2_
             call plugin=<extension> action=<name> [args={...}]
     windows ui_tree [window=T] [path="A > B"] | ui_click (name=N | text=T) [window=T] [path=..] [index=N]
             ui_answer_modal (role=accept|reject|yes|no|... | text=T) [expect=T] | ui_set (name=N | text=T) value=V
-            (MO2's windows and dialogs without the mouse; ui_tree is a read, the rest are writes - PROTOCOL.md 6)
+            ui_items (name=N | kind=view index=N) [start=N] [limit=N] [parent=[..]] [find=T]
+            ui_item name=N (row=N | match=T) action=select|check|uncheck|expand|collapse|scroll_to
+            ui_menus [window=T] [under="A > B"] | ui_menu (path="A > B > C" | name=N)
+            (MO2's windows, dialogs, lists and menus without the mouse; ui_tree, ui_items and ui_menus are reads,
+            the rest are writes - PROTOCOL.md 6)
   A value is read as JSON when it parses (true, 5, ["a"], {...}), else as text.
   --instance can be left out when the MO2_INSTANCE environment variable names the instance, or when the current folder
   is the instance (it holds ModOrganizer.exe).

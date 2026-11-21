@@ -40,8 +40,8 @@ log = logging.getLogger("mo2-mcp")
 SETTINGS = {"instance": "", "timeout": 600.0}     # filled by main(); the tools read them at call time
 
 INSTRUCTIONS = """Operate the user's running Mod Organizer 2 through the MO2 Agent Control plugin.
-Reads (info, profiles, mods, plugins, executables, overwrite, backups, ui_tree) always work.
-Writes (set_mods, set_plugins, select_profile, refresh, run, ui_click, ui_answer_modal, ui_set) are refused by MO2 while the user is using it - its window
+Reads (info, profiles, mods, plugins, executables, overwrite, backups, ui_tree, ui_items, ui_menus) always work.
+Writes (set_mods, set_plugins, select_profile, refresh, run, ui_click, ui_answer_modal, ui_set, ui_item, ui_menu) are refused by MO2 while the user is using it - its window
 in front and keyboard or mouse input in the last few minutes. If a write is refused, tell the user what you want to
 change and ask whether to go ahead; only after they agree, call it again with `confirm` set to a short note saying who
 approved it (for example "the user, in chat"). Never fill in confirm on your own.
@@ -49,7 +49,8 @@ Names passed to set_mods / set_plugins must match exactly (case included) what m
 Every write that changes the profile backs up modlist.txt, plugins.txt and loadorder.txt first; the reply names the folder.
 run starts a program through MO2's virtual file system and returns at once with its process id; it never waits.
 The ui_ tools reach MO2's windows and dialogs without the mouse: ui_tree (a read) shows the windows, the open modal
-dialog and the controls; ui_click, ui_answer_modal and ui_set are writes. Use them only for what the tools above cannot
+dialog and the controls, ui_items the rows of a list, ui_menus the menu entries; ui_click, ui_answer_modal, ui_set,
+ui_item and ui_menu are writes. Use them only for what the tools above cannot
 do, read a dialog with ui_tree before answering it, and tell the user what it asks first."""
 
 server = Server("MO2 Agent Control", instructions=INSTRUCTIONS)
@@ -259,6 +260,78 @@ def ui_set(confirm: str, value: bool | int | float | str, name: str = "", text: 
     a = _locator(name, text, window, path, kind, index)
     a["value"] = value
     return request("ui_set", a, confirm)
+
+
+@server.tool()
+def ui_items(name: str = "", window: str = "", path: str = "", index: int = -1, start: int = 0, limit: int = 100,
+             columns: list[int] = [], parent: list[int | str] = [], find: str = "") -> dict:
+    """The rows of one list, table or tree in an MO2 window (ui_tree lists them as kind "view": MO2's mod list is
+    "modList", its plugin list "espList"). Each row: row (its number), cells (the visible columns' texts), checked
+    (true / false / "partial" when the row has a box), selected, children (it has rows under it) and expanded. columns
+    names the columns; total and next page long lists (start, limit). parent opens a tree: the row numbers or first-
+    column texts down to the row whose rows are wanted. find keeps rows holding that text. A read: always allowed."""
+    a: dict = {"start": int(start), "limit": int(limit)}
+    for k, v in (("name", name), ("window", window), ("path", path), ("find", find)):
+        if v:
+            a[k] = v
+    if index >= 0:
+        a["index"] = index
+    if columns:
+        a["columns"] = list(columns)
+    if parent:
+        a["parent"] = list(parent)
+    return request("ui_items", a)
+
+
+@server.tool()
+def ui_item(confirm: str, action: str, name: str = "", window: str = "", path: str = "", index: int = -1, row: int = -1,
+            match: str = "", column: int = 0, parent: list[int | str] = []) -> dict:
+    """Act on one row of a list, table or tree: action is select, check, uncheck, expand, collapse or scroll_to. The
+    row is row (its number from ui_items) or match (the exact text of its cell in `column`) - one of them; two rows with
+    that text are refused. check / uncheck go through the list's own model, as a click on the box does - in MO2's mod
+    and plugin lists that enables or disables the mod or plugin (prefer set_mods / set_plugins for those: they check
+    names and write plugins.txt at once). The reply has row (as it is now) and applied. confirm: who approved this
+    while MO2 is in use (ask the user first; "" when no one has)."""
+    a: dict = {"action": action}
+    for k, v in (("name", name), ("window", window), ("path", path)):
+        if v:
+            a[k] = v
+    if index >= 0:
+        a["index"] = index
+    if row >= 0:
+        a["row"] = row
+    if match:
+        a["match"] = match
+        a["column"] = int(column)
+    if parent:
+        a["parent"] = list(parent)
+    return request("ui_item", a, confirm)
+
+
+@server.tool()
+def ui_menus(window: str = "", under: str = "", limit: int = 500) -> dict:
+    """The entries of an MO2 window's menu bar and tool bars as text paths ("Tools > Tool Plugins > My Tool"), each
+    with enabled, checked (tickable entries), menu (it only opens a submenu) and name (its objectName). under keeps one
+    branch. A read: always allowed."""
+    a: dict = {"limit": int(limit)}
+    if window:
+        a["window"] = window
+    if under:
+        a["under"] = under
+    return request("ui_menus", a)
+
+
+@server.tool()
+def ui_menu(confirm: str, path: str = "", name: str = "", window: str = "") -> dict:
+    """Choose one menu or tool bar entry, by path exactly as ui_menus shows it or by name (its objectName) - what a
+    click on the entry does. If it opens a dialog the reply has returned: false and modal: the dialog (answer it with
+    ui_answer_modal). Disabled entries and entries that only open a submenu are refused. confirm: who approved this
+    while MO2 is in use (ask the user first; "" when no one has)."""
+    a: dict = {}
+    for k, v in (("path", path), ("name", name), ("window", window)):
+        if v:
+            a[k] = v
+    return request("ui_menu", a, confirm)
 
 
 # ---- start ----------------------------------------------------------------------------------------------------------------

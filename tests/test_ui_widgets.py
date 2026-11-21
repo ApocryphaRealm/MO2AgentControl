@@ -11,6 +11,7 @@ Qt's "offscreen" platform is used, so no window appears on the screen.
      of hanging; the dialog is then answered by text (two buttons share the accept role, so role alone is refused) and
      by role; nothing behind an open modal can be acted on
   4  ui_set: checkbox, edit, combo (by text and by index), spin box, tab bar - each read back; wrong types refused
+  7  lists, tables and trees (ui_items, ui_item) and  8  menus and tool bars (ui_menus, ui_menu)
   6  a dialog inside a dialog: a tool window run with exec() and a question asked from inside it
   5  safety: an ambiguous locator is refused with the candidates listed, path and index pick one; a disabled button is
      refused; a write while MO2 is in use is refused without confirm; a click backs the profile's lists up first
@@ -30,8 +31,10 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, REPO)
 import mo2_ctl  # noqa: E402
 
-from PyQt6.QtCore import QObject, QTimer, pyqtSignal  # noqa: E402
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QLabel, QLineEdit,  # noqa: E402
+from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal  # noqa: E402
+from PyQt6.QtGui import QStandardItem, QStandardItemModel  # noqa: E402
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QListWidget, QMenuBar, QToolBar,  # noqa: E402
+                             QTreeView, QGroupBox, QLabel, QLineEdit,  # noqa: E402
                              QMessageBox, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
 PLUGIN = os.path.join(REPO, "plugins", "ApocryphaAgentControl")
@@ -60,6 +63,10 @@ class Org:
     def ui_click(self, a): return ui.click(a)
     def ui_answer_modal(self, a): return ui.answer_modal(a)
     def ui_set(self, a): return ui.set_value(a)
+    def ui_items(self, a): return ui.items(a)
+    def ui_item(self, a): return ui.item(a)
+    def ui_menus(self, a): return ui.menus(a)
+    def ui_menu(self, a): return ui.menu(a)
 
 
 app = QApplication(sys.argv[:1])
@@ -143,6 +150,49 @@ tool_btn = QPushButton("Open tool")
 tool_btn.setObjectName("toolBtn")
 tool_btn.clicked.connect(do_tool)
 lay.addWidget(tool_btn)
+
+# ---- a tree with tick boxes (the shape of MO2's mod list), a plain list, a menu bar and a tool bar
+tree_view = QTreeView()
+tree_view.setObjectName("modTree")
+model = QStandardItemModel()
+model.setHorizontalHeaderLabels(["Mod", "Priority"])
+for i, (label, ticked) in enumerate((("Alpha", True), ("Bravo", False), ("Same", False), ("Same", True))):
+    it = QStandardItem(label)
+    it.setCheckable(True)
+    it.setCheckState(Qt.CheckState.Checked if ticked else Qt.CheckState.Unchecked)
+    model.appendRow([it, QStandardItem(str(i))])
+folder = QStandardItem("Folder")
+for child in ("one.esp", "two.esp"):
+    folder.appendRow([QStandardItem(child), QStandardItem("")])
+model.appendRow([folder, QStandardItem("4")])
+locked = QStandardItem("Locked")
+locked.setCheckable(True)
+locked.setEnabled(False)
+model.appendRow([locked, QStandardItem("5")])
+tree_view.setModel(model)
+model.itemChanged.connect(lambda it: seen.setdefault("ticked", []).append((it.text(), it.checkState() == Qt.CheckState.Checked)))
+plain_list = QListWidget()
+plain_list.addItems(["red", "green", "blue"])
+lay.addWidget(tree_view), lay.addWidget(plain_list)
+bar = QMenuBar()
+m_file = bar.addMenu("&File")
+m_file.addAction("&Open...\tCtrl+O").triggered.connect(lambda: seen.setdefault("menu", []).append("open"))
+m_recent = m_file.addMenu("&Recent")
+m_recent.addAction("first.txt").triggered.connect(lambda: seen.setdefault("menu", []).append("recent-first"))
+gone = m_file.addAction("Gone")
+gone.setEnabled(False)
+m_view = bar.addMenu("&View")
+wrap = m_view.addAction("Word wrap")
+wrap.setCheckable(True)
+m_tools = bar.addMenu("&Tools")
+m_tools.addAction("Ask...").triggered.connect(do_ask)
+tb = QToolBar()
+act_refresh = tb.addAction("Refresh")
+act_refresh.setObjectName("actionRefresh")
+act_refresh.triggered.connect(lambda: seen.setdefault("menu", []).append("refresh"))
+lay.setMenuBar(bar)
+lay.addWidget(tb)
+
 apply_btn.clicked.connect(do_apply)
 ask_btn.clicked.connect(do_ask)
 win.show()
@@ -328,6 +378,88 @@ def steps():
     ok(r["ok"] and r["returned"] is True and seen.get("tool_closed") is True, "and the tool window closes by its own button", (r, seen))
     r = req("ui_tree")
     ok(r["ok"] and r["modal"] is None, "nothing modal is left open", r["modal"])
+    # ---- 7  lists, tables and trees: read through the model, operated through the model
+    r = req("ui_tree", window="Test Window", kinds=["view"])
+    ok(r["ok"] and [(c["name"], c["class"], c["rows"], c["columns"], c["tree"]) for c in r["controls"]]
+       == [("modTree", "QTreeView", 6, 2, True), ("", "QListWidget", 3, 1, False)], "ui_tree lists the views with their size", r["controls"])
+    r = req("ui_items", name="modTree")
+    ok(r["ok"] and r["total"] == 6 and [c["title"] for c in r["columns"]] == ["Mod", "Priority"]
+       and r["rows"][0] == {"row": 0, "cells": ["Alpha", "0"], "checked": True}
+       and r["rows"][1]["checked"] is False and r["rows"][4].get("children") is True and r["rows"][4]["expanded"] is False
+       and r["rows"][5].get("enabled") is False and r["next"] is None, "ui_items: cells, ticked, rows with rows under them, a disabled row", r)
+    r = req("ui_items", name="modTree", start=1, limit=2, columns=[0])
+    ok(r["ok"] and [x["cells"] for x in r["rows"]] == [["Bravo"], ["Same"]] and r["next"] == 3, "paging and chosen columns", r)
+    r = req("ui_items", name="modTree", find="lph")
+    ok(r["ok"] and [x["row"] for x in r["rows"]] == [0], "find keeps the rows that hold the text", r)
+    r = req("ui_items", name="modTree", parent=["Folder"])
+    ok(r["ok"] and [x["cells"][0] for x in r["rows"]] == ["one.esp", "two.esp"] and r["total"] == 2, "the rows under a row, by its text", r)
+    r = req("ui_items", kind="view", window="Test Window", index=1)
+    ok(r["ok"] and [x["cells"] for x in r["rows"]] == [["red"], ["green"], ["blue"]], "a list with no name, by index", r)
+    r = req("ui_items", window="Test Window")
+    ok(not r["ok"] and "2 widgets match" in r["error"], "two lists and no name: refused, the candidates listed", r)
+    r = req("ui_item", name="modTree", match="Bravo", action="check")
+    ok(r["ok"] and r["applied"] is True and r["row"]["checked"] is True and r["was"]["checked"] is False
+       and seen["ticked"] == [("Bravo", True)] and os.path.isdir(r["backup"]), "tick a row by its text: the model changed it (the program was told), backed up first", (r, seen.get("ticked")))
+    r = req("ui_item", name="modTree", row=0, action="uncheck")
+    ok(r["ok"] and r["applied"] is True and seen["ticked"][-1] == ("Alpha", False), "untick by row number", r)
+    r = req("ui_item", name="modTree", row=0, action="uncheck")
+    ok(r["ok"] and r["applied"] is True and len(seen["ticked"]) == 2, "unticking an unticked row changes nothing and says so", (r, seen["ticked"]))
+    r = req("ui_item", name="modTree", match="Same", action="check")
+    ok(not r["ok"] and "2 rows have 'Same'" in r["error"] and len(seen["ticked"]) == 2, "two rows with that text: refused, nothing ticked", r)
+    r = req("ui_item", name="modTree", match="Folder", action="check")
+    ok(not r["ok"] and "no box to tick" in r["error"], "a row with no box cannot be ticked", r)
+    r = req("ui_item", name="modTree", match="Locked", action="check")
+    ok(not r["ok"] and "disabled" in r["error"], "a disabled row cannot be ticked", r)
+    r = req("ui_item", name="modTree", match="Folder", action="expand")
+    ok(r["ok"] and r["applied"] is True and r["row"]["expanded"] is True and tree_view.isExpanded(model.index(4, 0)), "open a row", r)
+    r = req("ui_item", name="modTree", parent=[4], match="two.esp", action="select")
+    ok(r["ok"] and r["applied"] is True and r["row"].get("selected") is True
+       and tree_view.selectionModel().currentIndex().data() == "two.esp", "select a row under a row", r)
+    r = req("ui_item", name="modTree", match="Folder", action="collapse")
+    ok(r["ok"] and r["row"]["expanded"] is False, "close it again", r)
+    r = req("ui_item", name="modTree", row=99, action="select")
+    ok(not r["ok"] and "row must be 0..5" in r["error"], "a row that does not exist is an error", r)
+    r = req("ui_item", name="modTree", row=1, action="paint")
+    ok(not r["ok"] and "action is one of" in r["error"], "an unknown action is an error", r)
+    busy["v"] = True
+    r = req("ui_item", name="modTree", row=1, action="uncheck")
+    ok(not r["ok"] and r.get("refused") and len(seen["ticked"]) == 2, "a tick while MO2 is in use is refused", r)
+    r = req("ui_items", name="modTree", limit=1)
+    ok(r["ok"], "reading the rows is not")
+    busy["v"] = False
+
+    # ---- 8  menus and tool bars
+    r = req("ui_menus", window="Test Window")
+    paths = {e["path"]: e for e in r["entries"]}
+    ok(r["ok"] and {"File", "File > Open...", "File > Recent", "File > Recent > first.txt", "File > Gone", "View > Word wrap",
+                    "Tools > Ask...", "Refresh"} <= set(paths), "ui_menus: every entry as a text path, shortcut marks and keys removed", sorted(paths))
+    ok(paths["File > Gone"]["enabled"] is False and paths["View > Word wrap"]["checked"] is False
+       and paths["File > Recent"].get("menu") is True and paths["Refresh"].get("name") == "actionRefresh",
+       "entries say enabled, ticked, submenu and objectName", paths)
+    r = req("ui_menus", window="Test Window", under="File > Recent")
+    ok(r["ok"] and [e["path"] for e in r["entries"]] == ["File > Recent", "File > Recent > first.txt"], "under narrows the list", r)
+    r = req("ui_menu", window="Test Window", path="File > Open...")
+    ok(r["ok"] and r["returned"] is True and seen["menu"] == ["open"] and os.path.isdir(r["backup"]), "choose an entry by path", r)
+    r = req("ui_menu", window="Test Window", path="File > Recent > first.txt")
+    ok(r["ok"] and seen["menu"][-1] == "recent-first", "an entry inside a submenu", r)
+    r = req("ui_menu", window="Test Window", name="actionRefresh")
+    ok(r["ok"] and seen["menu"][-1] == "refresh", "a tool bar entry by its objectName", r)
+    r = req("ui_menu", window="Test Window", path="View > Word wrap")
+    ok(r["ok"] and r["checked"] is True and wrap.isChecked(), "a tickable entry reports its new state", r)
+    r = req("ui_menu", window="Test Window", path="File > Gone")
+    ok(not r["ok"] and "disabled" in r["error"], "a disabled entry is refused", r)
+    r = req("ui_menu", window="Test Window", path="File > Recent")
+    ok(not r["ok"] and "submenu" in r["error"], "an entry that only opens a submenu is refused", r)
+    r = req("ui_menu", window="Test Window", path="File > Nope")
+    ok(not r["ok"] and "no menu entry" in r["error"], "an unknown entry is an error", r)
+    r = req("ui_menu", window="Test Window", path="Tools > Ask...")
+    ok(r["ok"] and r["returned"] is False and r["modal"]["title"] == "Restore backup", "an entry that opens a dialog answers with the dialog described", r)
+    r = req("ui_menu", window="Test Window", path="File > Open...")
+    ok(not r["ok"] and "a modal dialog is open" in r["error"] and seen["menu"].count("open") == 1, "no menu behind an open dialog", r)
+    r = req("ui_item", name="modTree", window="Test Window", row=1, action="uncheck")
+    ok(not r["ok"] and "a modal dialog is open" in r["error"], "no list behind an open dialog", r)
+    r = req("ui_answer_modal", role="no")
+    ok(r["ok"] and r["closed"] is True, "the dialog answered", r)
     r = req("ui_tree", window="Test Window", limit=0)
     ok(not r["ok"] and "limit" in r["error"], "a bad limit is an error, not a crash", r)
 

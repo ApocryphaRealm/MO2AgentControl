@@ -85,7 +85,7 @@ mo2-ctl --instance "D:\MO2" backups
 
 ## For AI agents: the MCP server
 
-`mo2-mcp` (`mo2_mcp.py`) serves the same commands as sixteen MCP tools over stdio: `info`, `profiles`, `mods`,
+`mo2-mcp` (`mo2_mcp.py`) serves the same commands as twenty MCP tools over stdio: `info`, `profiles`, `mods`,
 `plugins`, `executables`, `overwrite`, `backups`, `set_mods`, `set_plugins`, `select_profile`, `refresh`, `run`.
 For Claude Desktop, add to `%APPDATA%\Claude\claude_desktop_config.json`:
 
@@ -120,7 +120,9 @@ pass it, and an empty note means the change goes through only while MO2 is idle.
 Since 1.1.0 four more commands reach what MO2's API does not: a plugin's own window, a settings dialog, a question
 waiting for an answer. `ui_tree` shows the visible windows, the open dialog (its text and buttons) and the controls;
 `ui_click` presses a button; `ui_answer_modal` answers the open dialog by role or by text; `ui_set` sets a checkbox,
-edit, combo box, spin box or tab and reads it back. They call the widgets' own methods - no mouse or keyboard input is
+edit, combo box, spin box or tab and reads it back. Since 1.1.0 `ui_items` reads the rows of any list, table or tree
+(MO2's mod list, plugin list, Data tab), `ui_item` selects, ticks or opens a row through the list's own model, and
+`ui_menus` / `ui_menu` list and choose menu and tool bar entries. They call the widgets' own methods - no mouse or keyboard input is
 sent and no window is raised - and they are answered even while a dialog is open.
 
 ```

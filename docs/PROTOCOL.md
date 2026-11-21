@@ -66,6 +66,7 @@ English whatever language MO2 shows, so a script can match on them.
 | `executables` | - | `executables`: `[{"title", "binary"}]` from MO2's executables list |
 | `backups` | - | `root`, `backups`: `[{"name", "path", "files"}]`, newest first |
 | `ui_tree` | `window`, `path`, `kinds`, `labels`, `limit` | the windows, the open modal dialog and the controls - section 6 |
+| `ui_items`, `ui_menus` | section 6 | the rows of a list, table or tree; the entries of the menus and tool bars (since 1.1.0) |
 
 ### Writes - refused while MO2 is in use (section 4)
 
@@ -79,11 +80,12 @@ English whatever language MO2 shows, so a script can match on them.
 | `call` | `plugin`, `action`, `args` | hands `action` and `args` to another MO2 plugin's handler (section 5); the reply's `result` is what it returned |
 | `mm` | `action`, `args` | short for `call` with `plugin: "MO2ModlistManager"` |
 | `ui_click`, `ui_answer_modal`, `ui_set` | section 6 | press a button, answer the open dialog, set a control - in any MO2 window, without the mouse |
+| `ui_item`, `ui_menu` | section 6 | select / tick / open a row of a list; choose a menu entry (since 1.1.0) |
 
 Names in `names` must match exactly (case included) what `mods` / `plugins` return; an unknown name fails the whole
 request before anything is changed.
 
-**Backups.** Before `select_profile`, `set_mods`, `set_plugins`, `call`, `mm`, `ui_click` and `ui_answer_modal`, the plugin copies the current profile's
+**Backups.** Before `select_profile`, `set_mods`, `set_plugins`, `call`, `mm`, `ui_click`, `ui_answer_modal`, `ui_item` and `ui_menu`, the plugin copies the current profile's
 `modlist.txt`, `plugins.txt` and `loadorder.txt` into `backups\<time>-<command>\`, and the reply names that folder in
 `backup`. To go back: close MO2 and copy the three files into `profiles\<profile>\`.
 
@@ -179,6 +181,46 @@ new connection:
 {"cmd": "ui_answer_modal", "args": {"text": "Apply, leave plugins as they are", "expect": "Apply"}}
 {"ok": true, "pressed": "Apply, leave plugins as they are", "closed": true, "returned": true, "modal": null}
 ```
+
+### Lists, tables and trees (since 1.1.0)
+
+`ui_tree` lists every list, table and tree as a control of kind `view` with `rows`, `columns` and `tree`. MO2's own:
+the mod list is `modList`, the plugin list `espList`, the Data tab's tree `dataTree`, the downloads list
+`downloadView`, the saves list `savegameList` (object names of MO2 2.5; `ui_tree` shows what your MO2 has).
+
+| cmd | kind | args | reply |
+|---|---|---|---|
+| `ui_items` | read | a view locator (`name`, or `kind: "view"` with `window` / `path` / `index`); `start` (0), `limit` (100, at most 1000), `columns` (list of column numbers; default: the visible ones), `parent`, `find` | `view`, `columns`: `[{"column", "title", "hidden"}]`, `total`, `start`, `rows`, `next` (the row to continue from, or `null`) |
+| `ui_item` | write | a view locator; `row` or `match` (+ `column`, default 0); `parent`; `action`; `wait_ms` | `view`, `action`, `was` (the row before), `row` (the row now), `applied`, `returned`, `modal` |
+
+A row is `{"row", "cells"}` plus `checked` (`true`, `false` or `"partial"`, when the row has a box), `selected`,
+`children` (it has rows under it), `expanded` and `enabled: false`. Rows are what the VIEW shows - sorted and filtered
+as on screen - because the commands ask the model the view is showing. `parent` reaches into a tree: a list of row
+numbers and / or first-column texts, outermost first (`["Folder", 3]`); a folder that loads its rows when first
+opened (the Data tab) is loaded by the request. `find` keeps the rows whose cells hold the text.
+
+`ui_item`'s `action` is `select` (the row becomes the current, only selected row, and is scrolled to), `check` /
+`uncheck` (through the model's check-state role - the call a click on the box makes - so the program reacts as it does
+to a click: in MO2's mod and plugin lists that enables or disables the mod or plugin; `set_mods` / `set_plugins`
+remain the better commands for those, they check names and write plugins.txt at once), `expand` / `collapse` (a
+tree's row) or `scroll_to`. `match` must name exactly one row at that level; two rows with the same text fail and list
+their numbers. A row without a box, a disabled row and a row that does not exist are refused.
+
+### Menus and tool bars (since 1.1.0)
+
+| cmd | kind | args | reply |
+|---|---|---|---|
+| `ui_menus` | read | `window`, `under` (one branch), `limit` (500) | `entries`: `[{"path", "enabled", "checked", "menu", "name"}]`, `total`, `truncated` |
+| `ui_menu` | write | `path` or `name`; `window`; `wait_ms` | `chosen` (the entry), `checked` (a tickable entry's new state), `returned`, `modal` |
+
+Every action of the window's menu bar and visible tool bars, and of the menus they open, as a text path
+(`"Tools > Tool Plugins > My Tool"`; no `&` marks, no shortcut keys). `menu: true` marks an entry that only opens a
+submenu. `ui_menu` triggers one entry - what a click on it does - found by `path` exactly as `ui_menus` shows it or by
+`name` (its objectName); an entry that matches more than once, a disabled one and a submenu are refused. Like a button
+press it may open a dialog: the reply then has `returned: false` and `modal`. Menus built only at the moment they are
+opened (a right-click menu, a menu filled in `aboutToShow`) are not listed.
+
+`ui_item` and `ui_menu` back the profile's list files up first and obey the in-use check, like the other writes.
 
 An action that runs long without opening a dialog answers when it is done, so allow the client a generous timeout.
 `ui_click` and `ui_answer_modal` back the profile's list files up first, like the other profile-changing writes

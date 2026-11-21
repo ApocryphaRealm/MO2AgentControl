@@ -260,6 +260,18 @@ class Mo2:
     def ui_set(self, args):
         return ui.set_value(args)
 
+    def ui_items(self, args):
+        return ui.items(args)
+
+    def ui_item(self, args):
+        return ui.item(args)
+
+    def ui_menus(self, args):
+        return ui.menus(args)
+
+    def ui_menu(self, args):
+        return ui.menu(args)
+
     def call_plugin(self, plugin, action, args):
         reg = sys.modules.get(REGISTRY)
         fn = getattr(reg, "handlers", {}).get(plugin) if reg else None

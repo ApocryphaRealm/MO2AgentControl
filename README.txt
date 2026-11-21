@@ -39,7 +39,7 @@ AI AGENTS (MCP)
 ---------------
   python mo2_mcp.py --instance "D:\MO2"      (or: mo2-mcp --instance "D:\MO2")
 Add it to Claude Desktop, Claude Code or Cursor with the snippets in docs\MCP.md. The agent gets the
-sixteen commands as tools; a change it tries while you are using MO2 is refused, and it has to ask you
+twenty commands as tools; a change it tries while you are using MO2 is refused, and it has to ask you
 before passing a confirm note.
 
 SAFETY

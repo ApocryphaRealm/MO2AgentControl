@@ -5,6 +5,10 @@ r"""MO2 Agent Control - the window commands (Qt only, no mobase, so the tests ru
   ui_click         presses one button, found by objectName, by its text, or by a path of names
   ui_answer_modal  presses a button of the open modal dialog, by role (accept, reject, yes, no ...) or by text
   ui_set           sets a checkbox / radio button, an edit, a combo box, a spin box or a tab bar, and reads the value back
+  ui_items         the rows of a list, table or tree (kind "view"): cells, ticked, selected, has rows under it
+  ui_item          selects, ticks / unticks, opens / closes or scrolls to one row - through the list's own model
+  ui_menus         the entries of a window's menu bar and tool bars, as text paths
+  ui_menu          chooses one of them (what a click on the entry does)
 
 No mouse or keyboard input is sent and no window is moved or raised: each command calls the widget's own method
 (click(), setText() ...), which works whether or not the window is in front, visible on screen, or minimised.
@@ -22,19 +26,21 @@ returns - or, if it has not returned after `wait_ms` (default 400), with "return
 in ("modal"). Answer that dialog with ui_answer_modal. Replies are English whatever MO2's language is (tools read them).
 """
 try:
-    from PyQt6.QtCore import QTimer
-    from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDialog,
+    from PyQt6.QtCore import QItemSelectionModel, QModelIndex, Qt, QTimer
+    from PyQt6.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractSpinBox, QApplication, QHeaderView, QMenuBar, QToolBar,
+                                 QTreeView, QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox, QGroupBox, QLabel, QLineEdit, QMessageBox,
                                  QPlainTextEdit, QRadioButton, QSpinBox, QTabBar, QTabWidget, QTextEdit, QWidget)
 except ImportError:  # MO2 before 2.5
-    from PyQt5.QtCore import QTimer
-    from PyQt5.QtWidgets import (QAbstractButton, QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDialog,
+    from PyQt5.QtCore import QItemSelectionModel, QModelIndex, Qt, QTimer
+    from PyQt5.QtWidgets import (QAbstractButton, QAbstractItemView, QAbstractSpinBox, QApplication, QHeaderView, QMenuBar, QToolBar,
+                                 QTreeView, QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox, QGroupBox, QLabel, QLineEdit, QMessageBox,
                                  QPlainTextEdit, QRadioButton, QSpinBox, QTabBar, QTabWidget, QTextEdit, QWidget)
 
 ROLES = {-1: "invalid", 0: "accept", 1: "reject", 2: "destructive", 3: "action", 4: "help", 5: "yes", 6: "no",
          7: "reset", 8: "apply"}
-KINDS = ("button", "checkbox", "radio", "edit", "text", "combo", "spin", "tabs", "label")
+KINDS = ("button", "checkbox", "radio", "edit", "text", "combo", "spin", "tabs", "label", "view")
 MAX_ITEMS = 100
 MAX_TEXT = 2000
 DEFAULT_LIMIT = 300
@@ -76,6 +82,16 @@ def kind_of(w):
         return "tabs"
     if isinstance(w, QLabel):
         return "label"
+    if isinstance(w, QHeaderView):
+        return None                     # a table's header belongs to its table
+    if isinstance(w, QAbstractItemView):
+        # the drop-down list of a combo box and the list of a date or completer pop-up belong to that control
+        p = w.parent()
+        while p is not None:
+            if isinstance(p, QComboBox):
+                return None
+            p = p.parent()
+        return "view"
     return None
 
 
@@ -110,6 +126,8 @@ def _where(w, root):
 
 def describe(w, root=None, buddies=None):
     k = kind_of(w)
+    if k == "view":
+        return describe_view(w, root)
     d = {"kind": k, "class": type(w).__name__, "name": w.objectName(), "enabled": bool(w.isEnabled()),
          "visible": bool(w.isVisible())}
     if root is not None:
@@ -279,7 +297,7 @@ def controls(roots, kinds=None, include_hidden=False, labels=False):
 def locate(a, acting=True, want=None):
     """The one widget the locator names. `want`: the kinds the command can act on."""
     name, text, kind = a.get("name"), a.get("text"), a.get("kind")
-    if not name and not text:
+    if not name and not text and kind != "view":      # a list often has neither: kind=view, then window / path / index
         raise ValueError("say which widget: name (its objectName) and/or text (what it shows) - ui_tree lists both")
     if kind and kind not in KINDS:
         raise ValueError("kind is one of %s" % ", ".join(KINDS))
@@ -506,3 +524,332 @@ def set_value(a):
         now = read()
         return {"value": now, "applied": now == value}
     return _later({"set": d, "asked": value}, action, after, _wait_ms(a))
+
+
+# ---- lists, tables and trees (QAbstractItemView), read and operated through their MODEL -----------------------------------
+# A view shows a model; everything here asks the model the view is showing (its proxy included), so a row is what the
+# person sees in that row - sorted and filtered as on screen. Nothing is painted or clicked: a row is selected through
+# the view's selection model, ticked through the model's own check-state role (the call a click on the box makes),
+# opened with expand(), brought into sight with scrollTo().
+DEFAULT_ROWS = 100
+MAX_ROWS = 1000
+MAX_COLUMNS = 40
+ITEM_ACTIONS = ("select", "check", "uncheck", "expand", "collapse", "scroll_to")
+
+
+def _check_role():
+    return Qt.ItemDataRole.CheckStateRole if hasattr(Qt, "ItemDataRole") else Qt.CheckStateRole
+
+
+def _display_role():
+    return Qt.ItemDataRole.DisplayRole if hasattr(Qt, "ItemDataRole") else Qt.DisplayRole
+
+
+def _ncols(m, idx):
+    try:
+        return int(m.columnCount(idx))
+    except TypeError:       # a plain list model keeps columnCount to itself: it always has one column
+        return 1
+
+
+def _has_rows(m, idx):
+    try:
+        return bool(m.hasChildren(idx))
+    except TypeError:       # a plain list model: a row never has rows under it
+        return False
+
+
+def _checked(index):
+    """True / False / "partial" for a checkable cell, None when the cell has no box."""
+    v = index.data(_check_role())
+    if v is None:
+        return None
+    n = _num(v)
+    return True if n == 2 else False if n == 0 else "partial"
+
+
+def _flag(index, name):
+    flags = index.flags()
+    scoped = getattr(Qt, "ItemFlag", Qt)
+    return bool(flags & getattr(scoped, name))
+
+
+def _cell(index):
+    v = index.data(_display_role())
+    return "" if v is None else _cut(str(v))
+
+
+def view_columns(view):
+    m = view.model()
+    if m is None:
+        return []
+    horizontal = Qt.Orientation.Horizontal if hasattr(Qt, "Orientation") else Qt.Horizontal
+    out = []
+    for c in range(min(_ncols(m, QModelIndex()), MAX_COLUMNS)):
+        h = m.headerData(c, horizontal, _display_role())
+        out.append({"column": c, "title": "" if h is None else clean(str(h)), "hidden": _column_hidden(view, c)})
+    return out
+
+
+def _column_hidden(view, c):
+    try:
+        return bool(view.isColumnHidden(c))
+    except (AttributeError, TypeError):
+        return False
+
+
+def describe_view(w, root=None):
+    m = w.model()
+    d = {"kind": "view", "class": type(w).__name__, "name": w.objectName(), "enabled": bool(w.isEnabled()),
+         "visible": bool(w.isVisible()), "rows": int(m.rowCount(QModelIndex())) if m is not None else 0,
+         "columns": int(_ncols(m, QModelIndex())) if m is not None else 0,
+         "tree": isinstance(w, QTreeView)}
+    if root is not None:
+        d["where"] = _where(w, root)
+    return d
+
+
+def _parent_index(view, parent):
+    """The index a `parent` path names: a list of row numbers and / or first-column texts, outermost first."""
+    m = view.model()
+    idx = QModelIndex()
+    for step in parent or []:
+        n = m.rowCount(idx)
+        if isinstance(step, int) and not isinstance(step, bool):
+            if not 0 <= step < n:
+                raise ValueError("parent row %d does not exist (rows 0..%d)" % (step, n - 1))
+            idx = m.index(step, 0, idx)
+        else:
+            hits = [r for r in range(n) if _cell(m.index(r, 0, idx)) == str(step)]
+            if len(hits) != 1:
+                raise ValueError("%d rows are named %r at that level - give the row number" % (len(hits), step))
+            idx = m.index(hits[0], 0, idx)
+        if m.canFetchMore(idx):
+            m.fetchMore(idx)            # a lazy tree (MO2's Data tab) loads a folder's rows when it is first opened
+    return idx
+
+
+def _row(view, parent_idx, r, columns):
+    m = view.model()
+    first = m.index(r, 0, parent_idx)
+    row = {"row": r, "cells": [_cell(m.index(r, c, parent_idx)) for c in columns]}
+    chk = _checked(first)
+    if chk is not None:
+        row["checked"] = chk
+    sel = view.selectionModel()
+    if sel is not None and sel.isRowSelected(r, parent_idx):
+        row["selected"] = True
+    if _has_rows(m, first):
+        row["children"] = True
+        if isinstance(view, QTreeView):
+            row["expanded"] = bool(view.isExpanded(first))
+    if not _flag(first, "ItemIsEnabled"):
+        row["enabled"] = False
+    return row
+
+
+def _locate_view(a, acting):
+    w, d = locate(dict(a, kind="view"), acting=acting, want=("view",))
+    if w.model() is None:
+        raise ValueError("that list has no content model")
+    return w, d
+
+
+def items(a):
+    """ui_items: the rows of one list, table or tree."""
+    w, d = _locate_view(a, acting=False)
+    m = w.model()
+    start, limit = a.get("start", 0), a.get("limit", DEFAULT_ROWS)
+    for v, what in ((start, "start"), (limit, "limit")):
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+            raise ValueError("%s is a whole number, 0 or more" % what)
+    limit = min(limit, MAX_ROWS)
+    cols = view_columns(w)
+    want = a.get("columns")
+    if want is not None:
+        if not isinstance(want, list) or not all(isinstance(c, int) and not isinstance(c, bool) and 0 <= c < len(cols) for c in want):
+            raise ValueError("columns is a list of column numbers 0..%d" % (len(cols) - 1))
+        use = want
+    else:
+        use = [c["column"] for c in cols if not c["hidden"]]
+    parent_idx = _parent_index(w, a.get("parent"))
+    total = m.rowCount(parent_idx)
+    find = a.get("find")
+    rows = []
+    r = start
+    while r < total and len(rows) < limit:
+        if find is None or str(find).lower() in " ".join(_cell(m.index(r, c, parent_idx)) for c in use).lower():
+            rows.append(_row(w, parent_idx, r, use))
+        r += 1
+    out = {"view": describe_view(w, w.window()), "columns": [cols[c] for c in use], "total": int(total), "start": start,
+           "rows": rows, "next": r if r < total else None}
+    if a.get("parent"):
+        out["parent"] = a["parent"]
+    return out
+
+
+def _target_row(view, a):
+    m = view.model()
+    parent_idx = _parent_index(view, a.get("parent"))
+    n = m.rowCount(parent_idx)
+    row, match = a.get("row"), a.get("match")
+    if (row is None) == (match is None):
+        raise ValueError("say which row: row (its number, as ui_items shows it) or match (the exact text of a cell) - one of them")
+    if row is not None:
+        if not isinstance(row, int) or isinstance(row, bool) or not 0 <= row < n:
+            raise ValueError("row must be 0..%d" % (n - 1))
+        return parent_idx, row
+    col = a.get("column", 0)
+    if not isinstance(col, int) or isinstance(col, bool) or not 0 <= col < _ncols(m, parent_idx):
+        raise ValueError("column must be 0..%d" % (_ncols(m, parent_idx) - 1))
+    hits = [r for r in range(n) if _cell(m.index(r, col, parent_idx)) == str(match)]
+    if not hits:
+        raise ValueError("no row has %r in column %d - ui_items lists the rows" % (match, col))
+    if len(hits) > 1:
+        raise ValueError("%d rows have %r in column %d - nothing was done; give the row number (rows %s)"
+                         % (len(hits), match, col, ", ".join(str(h) for h in hits[:10])))
+    return parent_idx, hits[0]
+
+
+def item(a):
+    """ui_item: select / check / uncheck / expand / collapse / scroll_to one row."""
+    action = a.get("action")
+    if action not in ITEM_ACTIONS:
+        raise ValueError("action is one of %s" % ", ".join(ITEM_ACTIONS))
+    w, d = _locate_view(a, acting=True)
+    _usable(w, d)
+    m = w.model()
+    parent_idx, r = _target_row(w, a)
+    first = m.index(r, 0, parent_idx)
+    before = _row(w, parent_idx, r, [0])
+    if action in ("check", "uncheck"):
+        if _checked(first) is None or not _flag(first, "ItemIsUserCheckable"):
+            raise ValueError("that row has no box to tick")
+        if not _flag(first, "ItemIsEnabled"):
+            raise ValueError("that row is disabled")
+        want = action == "check"
+        state = getattr(getattr(Qt, "CheckState", Qt), "Checked" if want else "Unchecked")
+
+        def act():
+            if _checked(m.index(r, 0, parent_idx)) is not want:
+                if not m.setData(m.index(r, 0, parent_idx), state, _check_role()):
+                    raise ValueError("the list refused the change")
+        after = lambda: {"row": _row(w, parent_idx, r, [0]), "applied": _checked(m.index(r, 0, parent_idx)) is want}  # noqa: E731
+    elif action == "select":
+        flag = QItemSelectionModel.SelectionFlag if hasattr(QItemSelectionModel, "SelectionFlag") else QItemSelectionModel
+        how = flag.ClearAndSelect | flag.Rows
+
+        def act():
+            w.selectionModel().setCurrentIndex(m.index(r, 0, parent_idx), how)
+            w.scrollTo(m.index(r, 0, parent_idx))
+        after = lambda: {"row": _row(w, parent_idx, r, [0]), "applied": bool(w.selectionModel().isRowSelected(r, parent_idx))}  # noqa: E731
+    elif action in ("expand", "collapse"):
+        if not isinstance(w, QTreeView):
+            raise ValueError("only a tree has rows to open")
+        if not _has_rows(m, first):
+            raise ValueError("that row has nothing under it")
+        want = action == "expand"
+
+        def act():
+            w.setExpanded(m.index(r, 0, parent_idx), want)
+        after = lambda: {"row": _row(w, parent_idx, r, [0]), "applied": bool(w.isExpanded(m.index(r, 0, parent_idx))) is want}  # noqa: E731
+    else:   # scroll_to
+        def act():
+            w.scrollTo(m.index(r, 0, parent_idx))
+        after = lambda: {"row": _row(w, parent_idx, r, [0]), "applied": True}  # noqa: E731
+    return _later({"view": d, "action": action, "was": before}, act, after, _wait_ms(a))
+
+
+# ---- menus: every QAction of a window's menu bar, its tool bars and the menus they open ------------------------------------
+def _action_text(act):
+    return clean(str(act.text() or "").split("\t")[0])
+
+
+def _menu_of(act):
+    try:
+        return act.menu()
+    except (AttributeError, RuntimeError):
+        return None
+
+
+def _walk_actions(actions, prefix, out, depth=0):
+    for act in actions:
+        if act.isSeparator() or not act.isVisible():
+            continue
+        text = _action_text(act) or clean(act.toolTip()) or act.objectName()
+        if not text:
+            continue
+        path = prefix + [text]
+        sub = _menu_of(act)
+        row = {"path": " > ".join(path), "enabled": bool(act.isEnabled())}
+        if act.objectName():
+            row["name"] = act.objectName()
+        if act.isCheckable():
+            row["checked"] = bool(act.isChecked())
+        if sub is not None:
+            row["menu"] = True
+        out.append((row, act))
+        if sub is not None and depth < 6:
+            _walk_actions(sub.actions(), path, out, depth + 1)
+
+
+def _menu_roots(a, acting):
+    # only `window` narrows a menu search: `path` and `name` here mean the ENTRY, not a place in the window
+    roots = scope({"window": a.get("window")} if a.get("window") else {}, acting)
+    wins = []
+    for r in roots:
+        w = r.window()
+        if not any(w is x for x in wins):
+            wins.append(w)
+    return wins
+
+
+def _all_actions(a, acting):
+    out = []
+    for win in _menu_roots(a, acting):
+        for bar in win.findChildren(QMenuBar):
+            if bar.window() is win:
+                _walk_actions(bar.actions(), [], out)
+        for tb in win.findChildren(QToolBar):
+            if tb.window() is win and tb.isVisible():
+                _walk_actions(tb.actions(), [], out)
+    return out
+
+
+def menus(a):
+    """ui_menus: the menu and tool bar entries of a window, as text paths."""
+    limit = a.get("limit", 500)
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("limit is a whole number above 0")
+    rows = [row for row, _act in _all_actions(a, acting=False)]
+    under = a.get("under")
+    if under:
+        rows = [r for r in rows if r["path"] == under or r["path"].startswith(str(under) + " > ")]
+    return {"entries": rows[:limit], "total": len(rows), "truncated": len(rows) > limit}
+
+
+def menu(a):
+    """ui_menu: choose one menu or tool bar entry by its path (or its objectName)."""
+    path, name = a.get("path"), a.get("name")
+    if bool(path) == bool(name):
+        raise ValueError("say which entry: path ('Tools > Tool Plugins > My Tool', as ui_menus shows it) or name (its objectName)")
+    hits = [(row, act) for row, act in _all_actions(a, acting=True)
+            if (path and row["path"] == path) or (name and row.get("name") == name)]
+    uniq = []
+    for row, act in hits:
+        if not any(act is u[1] for u in uniq):
+            uniq.append((row, act))
+    if not uniq:
+        raise ValueError("no menu entry %r - ui_menus lists them" % (path or name))
+    if len(uniq) > 1:
+        raise ValueError("%d entries match %r - nothing was chosen: %s"
+                         % (len(uniq), path or name, "; ".join(r["path"] for r, _a in uniq[:8])))
+    row, act = uniq[0]
+    if not row["enabled"]:
+        raise ValueError("that entry is disabled")
+    if row.get("menu"):
+        raise ValueError("that entry only opens a submenu - choose one of the entries under it")
+
+    def after():
+        return {"checked": bool(act.isChecked())} if act.isCheckable() else {}
+    return _later({"chosen": row}, act.trigger, after, _wait_ms(a))
