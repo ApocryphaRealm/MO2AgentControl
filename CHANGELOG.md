@@ -5,6 +5,7 @@ Versions are issued by the project's version gate. Written as the change happens
 ## 1.1.0 - 2026-11-20 - untested
 
 ### Added
+- A button in MO2's tool bar (beside Settings) that opens the status window. It is drawn in the colour your theme gives tool bar buttons and repainted when the theme or its stylesheet changes; the Tools menu entry has the same icon. `tests\test_toolbar_button.py` (12 checks).
 - `ui_item` and `ui_menu` back the profile's list files up first and obey the in-use check and `confirm`; nothing behind an open modal dialog can be reached. The same four as MCP tools (twenty tools now); `tests\test_ui_widgets.py` grew to 87 checks.
 - Menus and tool bars: `ui_menus` lists every entry of a window's menu bar and tool bars as a text path ("Tools > Tool Plugins > My Tool") with enabled, ticked and submenu; `ui_menu` chooses one by path or objectName - what a click does - and, like a button press, answers with the dialog described when the entry opens one.
 - Lists, tables and trees: `ui_tree` now lists every one as a control of kind `view`; `ui_items` reads its rows through the model the view shows (cells, ticked, selected, rows under a row, paging, `find`, `parent` for a tree - a folder that loads on demand is loaded); `ui_item` selects, ticks / unticks (through the model's check-state role, the call a click on the box makes), opens / closes or scrolls to one row, found by number or by the exact text of a cell. Two rows with the same text are refused, as are a row without a box and a disabled row.

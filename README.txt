@@ -19,7 +19,7 @@ pipx install mo2-agent-control.
 INSTALLATION
 ------------
 Copy the folder plugins\ApocryphaAgentControl into your MO2 folder's "plugins" folder, next to the
-other plugins, and restart MO2. Tools -> MO2 Agent Control shows whether it is listening.
+other plugins, and restart MO2. Tools -> MO2 Agent Control (or its tool bar button) shows whether it is listening.
 Copy mo2_ctl.py (and mo2_mcp.py, if you want the MCP server) anywhere convenient - or
 pipx install mo2-agent-control for the mo2-ctl and mo2-mcp commands. (If pip finds no such package,
 the PyPI upload has not happened yet: pipx install the .whl file from the GitHub release instead.)

@@ -58,6 +58,14 @@ calls `fetchMore` for a row that loads on demand. `ui_menus` walks `QMenuBar` / 
 `menu()`; `ui_menu` calls `QAction.trigger()`. No MO2 source was read for them and no MO2 model is subclassed,
 connected or replaced.
 
+## The tool bar button (1.1.0)
+
+MO2 has no plugin call for a tool bar button of a plugin's own, so `toolbar.py` adds a QAction to the main window's first
+QToolBar (before Settings), as MO2 Modlist Manager does, and looks every two seconds: MO2 rebuilds its tool bar, and a
+theme or .qss change must repaint the icon. The icon is the PNG's shape filled with the colour the stylesheet in force
+gives the button (`ensurePolished`, palette ButtonText, else WindowText). The timer belongs to the plugin's own object,
+no MO2 widget is subclassed, filtered or re-parented, and no MO2 source was read for it.
+
 ## Departures to revisit
 
 - set_plugins writes plugins.txt itself instead of waiting for MO2's own save. If a later MO2 offers a call that saves the

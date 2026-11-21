@@ -32,6 +32,7 @@ except ImportError:  # MO2 before 2.5
 
 from . import channel as channel_mod
 from . import core
+from . import toolbar
 from . import ui
 
 __version__ = "1.1.0"    # issued by version-gate.ps1; never typed by hand
@@ -332,6 +333,9 @@ class AgentControl(mobase.IPluginTool):
         self._org = organizer
         load_strings(mo2_language(organizer.basePath()))
         QTimer.singleShot(0, self._start)
+        # the tool bar button (toolbar.py): it opens the status window and is painted in the theme's button colour
+        self._button = toolbar.ToolbarButton(lambda: PLUGIN_NAME, self.tooltip, self.display, self._log)
+        self._button.start()
         return True
 
     def _setting(self, key, default):
@@ -418,7 +422,7 @@ class AgentControl(mobase.IPluginTool):
         return TR("AC_Tooltip", "Shows whether the command channel is listening")
 
     def icon(self):
-        return QIcon()
+        return toolbar.menu_icon()      # the Tools menu entry, in the application's text colour
 
     def setParentWidget(self, widget):
         self._parent = widget
