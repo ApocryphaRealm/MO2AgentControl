@@ -636,6 +636,8 @@ def _row(view, parent_idx, r, columns):
     chk = _checked(first)
     if chk is not None:
         row["checked"] = chk
+        if not _flag(first, "ItemIsUserCheckable"):
+            row["checkable"] = False       # the box is shown but is not the person's to tick (a game's own master)
     sel = view.selectionModel()
     if sel is not None and sel.isRowSelected(r, parent_idx):
         row["selected"] = True
@@ -840,6 +842,10 @@ def menu(a):
         if not any(act is u[1] for u in uniq):
             uniq.append((row, act))
     if not uniq:
+        dlg = modal()
+        if dlg is not None and not a.get("window"):
+            raise ValueError("a modal dialog is open (%r) - answer it first (ui_answer_modal); the menus behind it cannot "
+                             "be chosen" % (clean(dlg.windowTitle()) or type(dlg).__name__))
         raise ValueError("no menu entry %r - ui_menus lists them" % (path or name))
     if len(uniq) > 1:
         raise ValueError("%d entries match %r - nothing was chosen: %s"

@@ -194,7 +194,7 @@ the mod list is `modList`, the plugin list `espList`, the Data tab's tree `dataT
 | `ui_item` | write | a view locator; `row` or `match` (+ `column`, default 0); `parent`; `action`; `wait_ms` | `view`, `action`, `was` (the row before), `row` (the row now), `applied`, `returned`, `modal` |
 
 A row is `{"row", "cells"}` plus `checked` (`true`, `false` or `"partial"`, when the row has a box), `selected`,
-`children` (it has rows under it), `expanded` and `enabled: false`. Rows are what the VIEW shows - sorted and filtered
+`children` (it has rows under it), `expanded`, `enabled: false`, and `checkable: false` when the box is shown but is not the person's to tick (the game's own masters in MO2's plugin list) - `ui_item` refuses to tick such a row. Rows are what the VIEW shows - sorted and filtered
 as on screen - because the commands ask the model the view is showing. `parent` reaches into a tree: a list of row
 numbers and / or first-column texts, outermost first (`["Folder", 3]`); a folder that loads its rows when first
 opened (the Data tab) is loaded by the request. `find` keeps the rows whose cells hold the text.
@@ -216,7 +216,7 @@ their numbers. A row without a box, a disabled row and a row that does not exist
 Every action of the window's menu bar and visible tool bars, and of the menus they open, as a text path
 (`"Tools > Tool Plugins > My Tool"`; no `&` marks, no shortcut keys). `menu: true` marks an entry that only opens a
 submenu. `ui_menu` triggers one entry - what a click on it does - found by `path` exactly as `ui_menus` shows it or by
-`name` (its objectName); an entry that matches more than once, a disabled one and a submenu are refused. Like a button
+`name` (its objectName); an entry that matches more than once, a disabled one and a submenu are refused. While a modal dialog is open, the menus behind it cannot be chosen: the refusal says so and names the dialog. Like a button
 press it may open a dialog: the reply then has `returned: false` and `modal`. Menus built only at the moment they are
 opened (a right-click menu, a menu filled in `aboutToShow`) are not listed.
 

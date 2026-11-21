@@ -165,6 +165,9 @@ folder = QStandardItem("Folder")
 for child in ("one.esp", "two.esp"):
     folder.appendRow([QStandardItem(child), QStandardItem("")])
 model.appendRow([folder, QStandardItem("4")])
+forced = QStandardItem("Forced")           # a box that is shown but not the person's to tick (a game's own master)
+forced.setCheckState(Qt.CheckState.Checked)
+model.appendRow([forced, QStandardItem("9")])
 locked = QStandardItem("Locked")
 locked.setCheckable(True)
 locked.setEnabled(False)
@@ -381,12 +384,12 @@ def steps():
     # ---- 7  lists, tables and trees: read through the model, operated through the model
     r = req("ui_tree", window="Test Window", kinds=["view"])
     ok(r["ok"] and [(c["name"], c["class"], c["rows"], c["columns"], c["tree"]) for c in r["controls"]]
-       == [("modTree", "QTreeView", 6, 2, True), ("", "QListWidget", 3, 1, False)], "ui_tree lists the views with their size", r["controls"])
+       == [("modTree", "QTreeView", 7, 2, True), ("", "QListWidget", 3, 1, False)], "ui_tree lists the views with their size", r["controls"])
     r = req("ui_items", name="modTree")
-    ok(r["ok"] and r["total"] == 6 and [c["title"] for c in r["columns"]] == ["Mod", "Priority"]
+    ok(r["ok"] and r["total"] == 7 and [c["title"] for c in r["columns"]] == ["Mod", "Priority"]
        and r["rows"][0] == {"row": 0, "cells": ["Alpha", "0"], "checked": True}
        and r["rows"][1]["checked"] is False and r["rows"][4].get("children") is True and r["rows"][4]["expanded"] is False
-       and r["rows"][5].get("enabled") is False and r["next"] is None, "ui_items: cells, ticked, rows with rows under them, a disabled row", r)
+       and r["rows"][6].get("enabled") is False and r["next"] is None, "ui_items: cells, ticked, rows with rows under them, a disabled row", r)
     r = req("ui_items", name="modTree", start=1, limit=2, columns=[0])
     ok(r["ok"] and [x["cells"] for x in r["rows"]] == [["Bravo"], ["Same"]] and r["next"] == 3, "paging and chosen columns", r)
     r = req("ui_items", name="modTree", find="lph")
@@ -408,6 +411,12 @@ def steps():
     ok(not r["ok"] and "2 rows have 'Same'" in r["error"] and len(seen["ticked"]) == 2, "two rows with that text: refused, nothing ticked", r)
     r = req("ui_item", name="modTree", match="Folder", action="check")
     ok(not r["ok"] and "no box to tick" in r["error"], "a row with no box cannot be ticked", r)
+    r = req("ui_items", name="modTree", find="Forced")
+    ok(r["ok"] and r["rows"][0]["checked"] is True and r["rows"][0].get("checkable") is False
+       and "checkable" not in req("ui_items", name="modTree", find="Alpha")["rows"][0],
+       "a box that is shown but cannot be ticked says so (checkable false)", r)
+    r = req("ui_item", name="modTree", match="Forced", action="uncheck")
+    ok(not r["ok"] and "no box to tick" in r["error"], "... and ticking it is refused", r)
     r = req("ui_item", name="modTree", match="Locked", action="check")
     ok(not r["ok"] and "disabled" in r["error"], "a disabled row cannot be ticked", r)
     r = req("ui_item", name="modTree", match="Folder", action="expand")
@@ -418,7 +427,7 @@ def steps():
     r = req("ui_item", name="modTree", match="Folder", action="collapse")
     ok(r["ok"] and r["row"]["expanded"] is False, "close it again", r)
     r = req("ui_item", name="modTree", row=99, action="select")
-    ok(not r["ok"] and "row must be 0..5" in r["error"], "a row that does not exist is an error", r)
+    ok(not r["ok"] and "row must be 0..6" in r["error"], "a row that does not exist is an error", r)
     r = req("ui_item", name="modTree", row=1, action="paint")
     ok(not r["ok"] and "action is one of" in r["error"], "an unknown action is an error", r)
     busy["v"] = True
@@ -456,6 +465,11 @@ def steps():
     ok(r["ok"] and r["returned"] is False and r["modal"]["title"] == "Restore backup", "an entry that opens a dialog answers with the dialog described", r)
     r = req("ui_menu", window="Test Window", path="File > Open...")
     ok(not r["ok"] and "a modal dialog is open" in r["error"] and seen["menu"].count("open") == 1, "no menu behind an open dialog", r)
+    r = req("ui_menu", path="File > Open...")
+    ok(not r["ok"] and "a modal dialog is open" in r["error"] and seen["menu"].count("open") == 1,
+       "... also when no window is named: the refusal names the dialog, not a missing entry", r)
+    r = req("ui_menus")
+    ok(r["ok"] and r["total"] == 0, "with a dialog open and no window named, the dialog's own (no) menus are listed", r)
     r = req("ui_item", name="modTree", window="Test Window", row=1, action="uncheck")
     ok(not r["ok"] and "a modal dialog is open" in r["error"], "no list behind an open dialog", r)
     r = req("ui_answer_modal", role="no")

@@ -70,11 +70,12 @@ def main(argv):
         shown = {x["cells"][0]: x.get("checked") for x in r.get("rows", []) if x["cells"][0] in api}
         step("the mod list's rows are MO2's mods", r.get("ok") and len(shown) >= max(1, len([m for m in mods if not m["separator"]]) // 2),
              {"rows": r.get("total"), "columns": [c["title"] for c in r.get("columns", [])], "first": col0[:6], "api_mods": len(mods)})
+        can_tick = {x["cells"][0] for x in r.get("rows", []) if x.get("checkable", True)}
         ticked = {n: v for n, v in shown.items() if isinstance(v, bool)}
         step("each row's tick is the mod's enabled state", bool(ticked) and all(api[n] == v for n, v in ticked.items()),
              {n: (v, api[n]) for n, v in list(ticked.items())[:6]})
 
-        victim = next((n for n, v in ticked.items() if v and col0.count(n) == 1), None)
+        victim = next((n for n, v in ticked.items() if v and col0.count(n) == 1 and n in can_tick), None)
         step("an enabled mod to untick was found", bool(victim), victim)
         r = call("ui_item", name="modList", match=victim, action="uncheck")
         step("untick it through the list's model", r.get("ok") and r.get("applied") is True and r["row"].get("checked") is False
@@ -102,6 +103,10 @@ def main(argv):
         both = [n for n in names if n in api_p]
         step("the plugin list's rows are MO2's plugins", r.get("ok") and len(both) >= max(1, len(plugs) // 2),
              {"rows": r.get("total"), "first": names[:5], "api_plugins": len(plugs)})
+        fixed = [x["cells"][0] for x in r.get("rows", []) if x.get("checkable") is False]
+        step("the game's own masters say their box cannot be ticked", any(n.lower() == "skyrim.esm" for n in fixed), fixed[:6])
+        r = call("ui_item", name="espList", match=fixed[0], action="uncheck")
+        step("... and ticking one is refused", not r.get("ok") and "no box to tick" in str(r.get("error")), r.get("error"))
 
         tabs = next((c for c in call("ui_tree", kinds=["tabs"]).get("controls", []) if "Data" in (c.get("items") or [])), None)
         step("the right pane's tab bar is there", bool(tabs), tabs and tabs.get("items"))
@@ -138,7 +143,8 @@ def main(argv):
             step("choose an entry that opens a window: the reply describes it", r.get("ok") and r.get("returned") is False
                  and (r.get("modal") or {}).get("title") == "MO2 Modlist Manager", {"path": mm["path"], "modal": (r.get("modal") or {}).get("title")})
             r = call("ui_menus")
-            step("no menu behind the open window is offered for a write", True, {"entries_listed": r.get("total")})
+            step("with the window open, only its own (no) menus are listed", r.get("ok") and r.get("total") == 0,
+                 {"entries_listed": r.get("total")})
             r = call("ui_menu", path=mm["path"])
             step("... and choosing one is refused", not r.get("ok") and "modal dialog is open" in str(r.get("error")), r.get("error"))
             r = call("ui_click", text="Close")
