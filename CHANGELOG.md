@@ -2,7 +2,7 @@
 
 Versions are issued by the project's version gate. Written as the change happens (rule 61).
 
-## 1.1.0 - 2026-11-20 - untested
+## 1.1.0 - 2026-11-20 - working
 
 ### Added
 - A button in MO2's tool bar (beside Settings) that opens the status window. It is drawn in the colour your theme gives tool bar buttons and repainted when the theme or its stylesheet changes; the Tools menu entry has the same icon. `tests\test_toolbar_button.py` (12 checks).

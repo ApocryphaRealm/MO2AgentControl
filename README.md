@@ -86,7 +86,8 @@ mo2-ctl --instance "D:\MO2" backups
 ## For AI agents: the MCP server
 
 `mo2-mcp` (`mo2_mcp.py`) serves the same commands as twenty MCP tools over stdio: `info`, `profiles`, `mods`,
-`plugins`, `executables`, `overwrite`, `backups`, `set_mods`, `set_plugins`, `select_profile`, `refresh`, `run`.
+`plugins`, `executables`, `overwrite`, `backups`, `set_mods`, `set_plugins`, `select_profile`, `refresh`, `run`,
+and the window commands `ui_tree`, `ui_click`, `ui_answer_modal`, `ui_set`, `ui_items`, `ui_item`, `ui_menus`, `ui_menu`.
 For Claude Desktop, add to `%APPDATA%\Claude\claude_desktop_config.json`:
 
 ```json
